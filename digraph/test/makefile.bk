@@ -1,0 +1,47 @@
+
+SRCDIR = src
+INCDIR = include
+DEPDIR = depend
+OBJDIR = obj
+BINDIR = bin
+
+TEST_RUNNER_DIR = ../../testRunner
+MODULES = $(TEST_RUNNER_DIR)
+TARGET = runAdjacencyDiGraphTest
+
+vpath %.cpp ./$(SRCDIR)/
+vpath %.hpp ./$(INCDIR)/
+vpath %.d ./$(DEPDIR)/
+vpath %.o ./$(OBJDIR)/
+
+CXX = g++
+INCFLAGS = -I $(INCDIR)/ -I ../$(INCDIR)/ $(foreach mod,$(MODULES),-I $(mod)/$(INCDIR)/ )
+LIBFLAGS = 
+CPPFLAGS = $(INCFLAGS) $(LIBFLAGS) -std=c++14 -g -Wall
+
+SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp) )
+OBJECTS = $(SOURCES:%.cpp=%.o)
+DEPS = $(SOURCES:%.cpp=%.d)
+
+%.d:	%.cpp
+	$(CXX) $(CPPFLAGS) -M -MF $(DEPDIR)/$@ $^
+
+.PHONY: all
+all: 	configure
+	$(foreach mod,$(MODULES),cd $(mod) && make configure && make build &&) cd $(PWD)
+	make build
+
+-include $(addprefix $(DEPDIR)/,$(DEPS))
+
+.PHONY: clean
+clean:
+	find $(OBJDIR) $(BINDIR) $(DEPDIR) -mindepth 1 -exec rm \{\} \;
+	$(foreach mod,$(MODULES),cd $(mod) && make clean &&) cd $(PWD)
+
+.PHONY: configure
+configure: 	$(DEPS)
+
+.PHONY: build
+build: 	$(OBJECTS)
+	find ./ -maxdepth 1 -name "*.o" -exec mv \{\} $(OBJDIR)/ \;
+	$(CXX) $(CPPFLAGS) -o $(BINDIR)/$(TARGET) $(shell find $(MODULES)/$(OBJDIR)/ -name "*.o") $(addprefix $(OBJDIR)/,$(filter-out $(TARGET).o,$(OBJECTS) ) ) $(OBJDIR)/$(TARGET).o
