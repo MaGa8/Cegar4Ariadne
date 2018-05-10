@@ -2,7 +2,7 @@ ROOTDIR = ../..
 MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR)
 TARGET = runRefinementTreeTest
 
-include $(ROOTDIR)/common.mk
+-include $(ROOTDIR)/common.mk
 
 INCFLAGS += -I $(ARIADNE_DIR)/ -I $(ARIADNE_DIR)/source/
 LIBFLAGS = -L $(ARIADNE_DIR)/build/ -l ariadne -l ariadne-kernel

@@ -23,7 +23,7 @@ BINDIR = bin
 
 vpath %.cpp $(SRCDIR)/
 vpath %.hpp $(INCDIR)/
-vpath %.d $(DEPDIR)/
+# vpath %.d $(DEPDIR)/
 vpath %.o $(OBJDIR)/
 
 CXX = g++
@@ -49,7 +49,7 @@ all: 	check depend
 %.d:	%.cpp
 	$(CXX) $(CXXFLAGS) -M -MF $(DEPDIR)/$@ $^
 
--include $$(addprefix $(DEPDIR)/,$(LOCAL_DEPS))
+-include $(addprefix $(DEPDIR)/,$(LOCAL_DEPS))
 
 .PHONY: clean
 clean:	check
@@ -57,7 +57,7 @@ clean:	check
 	$(foreach mod,$(MODULES),echo $PWD && cd $(mod) && make clean && cd $(PWD) &&) echo "cleaned"
 
 .PHONY: depend
-depend: 	$(LOCAL_DEPS)
+depend: $(LOCAL_DEPS)
 
 .PHONY: build
 build: 	check $(LOCAL_OBJECTS)
