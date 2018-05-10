@@ -52,9 +52,9 @@ void RefinementTreeTest::ExpansionTest::iterate()
 
     std::uniform_int_distribution<> pickDist( 0, ls.size() - 1 );
     typename std::vector< typename ExactRefinementTree::NodeT >::iterator iexp = ls.begin() + pickDist( mRandom );
-    mPreviousNoNodes = mpRtree->getTree().size();
-    mPreviousHeight = tree::subtreeHeight( mpRtree->getTree(), tree::root( mpRtree->getTree() ) );
-    mExpandNodeDepth = tree::depth( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), *iexp ) );
+    mPreviousNoNodes = mpRtree->tree().size();
+    mPreviousHeight = tree::subtreeHeight( mpRtree->tree(), tree::root( mpRtree->tree() ) );
+    mExpandNodeDepth = tree::depth( mpRtree->tree(), graph::value( mpRtree->leafMapping(), *iexp ) );
 
     mpRtree->refine( *iexp, *mpRefiner );
 }
@@ -62,8 +62,8 @@ void RefinementTreeTest::ExpansionTest::iterate()
 bool RefinementTreeTest::ExpansionTest::check() const
 {
     D( std::cout << "expansion test check" << std::endl; );
-    size_t noNodesExpanded = mpRtree->getTree().size();
-    size_t newHeight = subtreeHeight( mpRtree->getTree(), root( mpRtree->getTree() ) );
+    size_t noNodesExpanded = mpRtree->tree().size();
+    size_t newHeight = subtreeHeight( mpRtree->tree(), root( mpRtree->tree() ) );
     if( noNodesExpanded - mPreviousNoNodes != EXPANSION_SIZE )
     {
 	D( std::cout << "numer of nodes test failed" << std::endl; );
@@ -166,9 +166,9 @@ bool RefinementTreeTest::ImageTest::check() const
 
     // for each leaf, check: either does not intersect smaller box or is contained in image
     std::vector< typename ExactRefinementTree::NodeT > imageSmallerBox = mpRtree->image( smallerBox );
-    for( typename ExactRefinementTree::NodeT leaf : mpRtree->leaves( tree::root( mpRtree->getTree() ) ) )
+    for( typename ExactRefinementTree::NodeT leaf : mpRtree->leaves( tree::root( mpRtree->tree() ) ) )
     {
-	const typename ExactRefinementTree::EnclosureT& leafBox = tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), leaf ) ).getEnclosure();
+	const typename ExactRefinementTree::EnclosureT& leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure();
 	if( smallerBox.intersects( leafBox ) )
 	{
 	    typename std::vector< typename ExactRefinementTree::NodeT >::iterator iImg;
@@ -205,25 +205,25 @@ bool RefinementTreeTest::NonLeafRemovalTest::check() const
 {
     D( std::cout << "non leaf removal test check" << std::endl; );
     std::stack< typename ExactRefinementTree::RefinementT::NodeT > toCheck;
-    toCheck.push( tree::root( mpRtree->getTree() ) );
+    toCheck.push( tree::root( mpRtree->tree() ) );
 
     while( !toCheck.empty() )
     {
 	typename ExactRefinementTree::RefinementT::NodeT& nex = toCheck.top();
-	if( !tree::isLeaf( mpRtree->getTree(), nex ) )
+	if( !tree::isLeaf( mpRtree->tree(), nex ) )
 	{
-	    typename ExactRefinementTree::MappingT::VIterT ivfound = graph::findVertex( mpRtree->getLeafMapping(), nex );
-	    if( ivfound != vertices( mpRtree->getLeafMapping() ).second )
+	    typename ExactRefinementTree::MappingT::VIterT ivfound = graph::findVertex( mpRtree->leafMapping(), nex );
+	    if( ivfound != vertices( mpRtree->leafMapping() ).second )
 	    {
-		D( std::cout << "box " << tree::value( mpRtree->getTree(), nex ).getEnclosure()
+		D( std::cout << "box " << tree::value( mpRtree->tree(), nex ).getEnclosure()
 		   << " is not a leaf but found in graph as "
-		   << tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), *ivfound ) ).getEnclosure() << std::endl; );
+		   << tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), *ivfound ) ).getEnclosure() << std::endl; );
 		return false;
 	    }
 	}
 
 	toCheck.pop();
-	typename tree::FixedBranchTreeTraits< typename ExactRefinementTree::RefinementT >::CRangeT cs = children( mpRtree->getTree(), nex );
+	typename tree::FixedBranchTreeTraits< typename ExactRefinementTree::RefinementT >::CRangeT cs = children( mpRtree->tree(), nex );
 	for( ; cs.first != cs.second; ++cs.first )
 	    toCheck.push( *cs.first );
 	return true;
@@ -268,8 +268,8 @@ bool RefinementTreeTest::PreimageTest::check() const
 	
 	for( typename ExactRefinementTree::NodeT& leaf : allLeaves )
 	{
-	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), leaf ) ).getEnclosure()
-		, refinementBox = tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), refinement ) ).getEnclosure();
+	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure()
+		, refinementBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), refinement ) ).getEnclosure();
 	    auto iFound = std::find_if( preimg.begin(), preimg.end()
 					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) { return nodeEquals( *mpRtree, leaf, pn ); } );
 	    bool isReach = possibly( mpRtree->isReachable( leaf, refinement ) );
@@ -328,8 +328,8 @@ bool RefinementTreeTest::PostimageTest::check() const
 	
 	for( typename ExactRefinementTree::NodeT& leaf : allLeaves )
 	{
-	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), leaf ) ).getEnclosure()
-		, refinementBox = tree::value( mpRtree->getTree(), graph::value( mpRtree->getLeafMapping(), refinement ) ).getEnclosure();
+	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure()
+		, refinementBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), refinement ) ).getEnclosure();
 	    auto iFound = std::find_if( postimg.begin(), postimg.end()
 					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) { return nodeEquals( *mpRtree, leaf, pn ); } );
 	    bool isReach = possibly( mpRtree->isReachable( refinement, leaf ) );
@@ -365,12 +365,12 @@ bool RefinementTreeTest::PositiveCounterexampleTest::check() const
       in one dimension, so assuming equal number of splits along each dimension, multiply by 2
     */
     const double constraintBoundary = 2;
-    const uint refinementDepth = 10;
+    const uint refinementDepth = 8;
     Ariadne::Effort effort( 5 );
     
     D( std::cout << "preimage test init" << std::endl; );
     Ariadne::ExactBoxType rootBox( { {0,1}, {0,3} } )
-	, initialBox( { {0,0.75}, {0,1.05} } );
+	, initialBox( { {0,0.75}, {0,1.25} } );
     // need refinement tree with non-static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > fspace = {x, y};
@@ -386,6 +386,7 @@ bool RefinementTreeTest::PositiveCounterexampleTest::check() const
     // refine range (0,1.1) to less than 0.1, so 1.1 / 2^x <= 0.1
     std::cout << "need to refine " << refinementDepth << " levels " << std::endl;
     refineEqualDepth( rtree, refinementDepth );
+
     // root box is initial state
     std::vector< typename ExactRefinementTree::NodeT > initImage = rtree.image( initialBox );
     auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );

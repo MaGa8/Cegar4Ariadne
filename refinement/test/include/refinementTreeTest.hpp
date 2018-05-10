@@ -48,9 +48,9 @@ struct RefinementTreeTest : public ITestGroup
     template< typename IntervalT >
     static bool nodeEquals( const RefinementTree< IntervalT >& rt, const typename RefinementTree< IntervalT >::NodeT& n1, const typename RefinementTree< IntervalT >::NodeT& n2 )
     {
-	return tree::value( rt.getTree()
-			    , graph::value( rt.getLeafMapping(), n1 ) ).getEnclosure() == tree::value( rt.getTree()
-													, graph::value( rt.getLeafMapping(), n2 ) ).getEnclosure();
+	return tree::value( rt.tree()
+			    , graph::value( rt.leafMapping(), n1 ) ).getEnclosure() == tree::value( rt.tree()
+													, graph::value( rt.leafMapping(), n2 ) ).getEnclosure();
     }
 
     template< typename IntervalT >

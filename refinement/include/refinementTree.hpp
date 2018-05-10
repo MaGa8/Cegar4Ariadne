@@ -84,31 +84,47 @@ class RefinementTree
 	    addEdge( mMappings, initialNode, initialNode );
     }
 
-    const Ariadne::ConstraintSet& getConstraints()
+    //! \return constraints determining the safe set
+    const Ariadne::ConstraintSet& constraints() const
     {
 	return mConstraints;
     }
 
-    const Ariadne::EffectiveVectorFunction& getDynamics()
+    const Ariadne::EffectiveVectorFunction& dynamics() const
     {
 	return mDynamics;
     }
 
-    const RefinementT& getTree() const
+    //! \return tree storing iterative refinements
+    const RefinementT& tree() const
     {
 	return mRefinements;
     }
 
-    const MappingT& getLeafMapping() const
+    //! \return graph storing reachability between leaves
+    const MappingT& leafMapping() const
     {
 	return mMappings;
     }
 
-    // TODO: implement const image function at some point
+    //! \return tree value stored at node v, storing the box and safety
+    const TreeValue& nodeValue( const NodeT& v ) const
+    {
+	return tree::value( mRefinements, graph::value( mMappings, v ) );
+    }
+
+    //! \return true if n1 and n2 are equivalent, false otherwise
+    Ariadne::ValidatedLowerKleenean nodesEqual( const NodeT& n1, const NodeT& n2 ) const
+    {
+	Ariadne::LowerKleenean areEqual = tree::value( mRefinements, graph::value( mMappings, n1 ) ).getEnclosure() ==
+	    tree::value( mRefinements, graph::value( mMappings, n2 ) ).getEnclosure();
+	return areEqual.check( mEffort );
+    }
+
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from
     template< typename EnclosureT2 >
-    std::vector< NodeT > image( const EnclosureT2& from )
+    std::vector< NodeT > image( const EnclosureT2& from ) const
     {
 	std::vector< NodeT > constImage = imageRecursive( from, root( mRefinements ) );
 	return constImage;
@@ -117,7 +133,7 @@ class RefinementTree
     // helper function for recursive calls of image
     // abstract same code as leaves in DFS controller
     template< typename EnclosureT2 >
-    std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to )
+    std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to ) const
     {
     	// vector because there can't be duplicates
     	std::vector< NodeT > parts;
@@ -155,19 +171,19 @@ class RefinementTree
 
     // all node accessors: can be declared const, because tree or graph need to be accessed in order to change anything
     //! \return all leaves of the tree
-    std::vector< NodeT > leaves()
+    std::vector< NodeT > leaves() const 
     {
 	return leaves( tree::root( mRefinements ) );
     }
     
     //! \return all leaves in subtree at v
-    std::vector< NodeT > leaves( const NodeT& v )
+    std::vector< NodeT > leaves( const NodeT& v ) const
     {
 	return leaves( graph::value( mMappings, v ) );
     }
     
     //! \return all leaves in subtree at subRoot
-    std::vector< NodeT > leaves( const typename RefinementT::NodeT& treev ) 
+    std::vector< NodeT > leaves( const typename RefinementT::NodeT& treev ) const
     {
     	std::vector< NodeT > ls;
 	
@@ -192,7 +208,7 @@ class RefinementTree
     }
 
     //! \return all leaves in refinement tree mapping to from
-    std::vector< NodeT > preimage( const NodeT& from ) 
+    std::vector< NodeT > preimage( const NodeT& from ) const
     {
 	std::vector< NodeT > preimg;
 	typename graph::DiGraphTraits< MappingT >::InRangeT ins = graph::inEdges( mMappings, from );
@@ -203,7 +219,7 @@ class RefinementTree
     }
 
     //! \return all leaves in refinement tree from maps to
-    std::vector< NodeT > postimage( const NodeT& from )
+    std::vector< NodeT > postimage( const NodeT& from ) const 
     {
 	std::vector< NodeT > postimg;
 	typename graph::DiGraphTraits< MappingT >::OutRangeT outs = graph::outEdges( mMappings, from );
@@ -212,34 +228,18 @@ class RefinementTree
 	return postimg;
     }
 
-    const TreeValue& getNodeValue( const NodeT& v ) const
-    {
-	return tree::value( mRefinements, graph::value( mMappings, v ) );
-    }
-
-    //! \return true if v is safe with certainty, false otherwise
-    bool isSafe( const NodeT& v ) const
-    {
-    	return definitely( getNodeValue( v ).isSafe() );
-    }
-
-    Ariadne::ValidatedLowerKleenean nodesEqual( const NodeT& n1, const NodeT& n2 ) const
-    {
-	Ariadne::LowerKleenean areEqual = tree::value( mRefinements, graph::value( mMappings, n1 ) ).getEnclosure() ==
-	    tree::value( mRefinements, graph::value( mMappings, n2 ) ).getEnclosure();
-	return areEqual.check( mEffort );
-    }
-
     //! \return true if trg is deemed reachable from src
     // \todo eventually parametrize this
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
-    Ariadne::ValidatedKleenean isReachable( const NodeT& src, const NodeT& trg ) const
+    Ariadne::ValidatedUpperKleenean isReachable( const NodeT& src, const NodeT& trg ) const
     {
 	const EnclosureT& srcBox = tree::value( mRefinements, graph::value( mMappings, src ) ).getEnclosure()
 	    , trgBox = tree::value( mRefinements, graph::value( mMappings, trg ) ).getEnclosure();
 
-	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedCentre = mDynamics.evaluate( srcBox.centre() );
-    	return trgBox.contains( mappedCentre );
+	Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
+	auto mapIntersection = Ariadne::intersection( ubMapped, trgBox );
+	Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
+	return doesInter;
     }
 
     /*! 
@@ -274,50 +274,51 @@ class RefinementTree
 
     	// add edges
 	// NO! NONE OF THIS WORKS! EDGES MAY APPEAR "OUT OF NOTHING" DUE TO THE WAY BOXES ARE SAID TO MAP INTO EACH OTHER! --->
-	// std::vector< NodeT > pres( preimage( v ) );
-	// std::vector< NodeT > posts( postimage( v ) );
-	// // append all children of refined node, because center mapping refinements may introduce new links absent at parent level
-	// // simply adding v is fine, because pres and posts will be traced down to leaf
-	// pres.push_back( v );
-	// posts.push_back( v );
+	// misunderstanding...
+	std::vector< NodeT > pres( preimage( v ) );
+	std::vector< NodeT > posts( postimage( v ) );
+	// append all children of refined node, because center mapping refinements may introduce new links absent at parent level
+	// simply adding v is fine, because pres and posts will be traced down to leaf
+	pres.push_back( v );
+	posts.push_back( v );
 	
-    	// for( NodeT& refined : refinedNodes )
-    	// {
-    	//     // determine which elements of the preimage of v map to which refined component
-    	//     for( NodeT& pre : pres )
-    	//     {
-    	// 	for( NodeT& preLeaf : leaves( pre ) )
-    	// 	{
-    	// 	    if( possibly( isReachable( preLeaf, refined ) ) )
-	// 		graph::addEdge( mMappings, preLeaf, refined );
-    	// 	}
-    	//     }
-    	//     // determine which elements of the postimage the components of v map to
-    	//     for( NodeT& post : posts )
-    	//     {
-    	// 	for( NodeT& postLeaf : leaves( post ) )
-    	// 	{
-	// 	    if( possibly( isReachable( refined, postLeaf ) ) )
-	// 		graph::addEdge( mMappings, refined, postLeaf );
-    	// 	}
-    	//     }
-    	// }
-    	// unlink v from the graph
+    	for( NodeT& refined : refinedNodes )
+    	{
+    	    // determine which elements of the preimage of v map to which refined component
+    	    for( NodeT& pre : pres )
+    	    {
+    		for( NodeT& preLeaf : leaves( pre ) )
+    		{
+    		    if( possibly( isReachable( preLeaf, refined ) ) )
+			graph::addEdge( mMappings, preLeaf, refined );
+    		}
+    	    }
+    	    // determine which elements of the postimage the components of v map to
+    	    for( NodeT& post : posts )
+    	    {
+    		for( NodeT& postLeaf : leaves( post ) )
+    		{
+		    if( possibly( isReachable( refined, postLeaf ) ) )
+			graph::addEdge( mMappings, refined, postLeaf );
+    		}
+    	    }
+    	}
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
 
-	auto lvs = leaves( tree::root( mRefinements ) );
-	for( NodeT& refined : refinedNodes )
-	{
-	    for( NodeT& lf : lvs )
-	    {
-		if( possibly( isReachable( lf, refined ) ) )
-		    graph::addEdge( mMappings, lf, refined );
-		if( possibly( isReachable( refined, lf ) ) )
-		    graph::addEdge( mMappings, refined, lf );
-	    }
-	}
+	// auto lvs = leaves( tree::root( mRefinements ) );
+	// for( NodeT& refined : refinedNodes )
+	// {
+	//     for( NodeT& lf : lvs )
+	//     {
+	// 	if( possibly( isReachable( lf, refined ) ) )
+	// 	    graph::addEdge( mMappings, lf, refined );
+	// 	if( possibly( isReachable( refined, lf ) ) )
+	// 	    graph::addEdge( mMappings, refined, lf );
+	//     }
+	// }
 	
+	// unlink v from the graph
 	graph::removeVertex( mMappings, v );
     }
 
@@ -349,30 +350,30 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 {
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
     {
-        // look for loop										       
-	typename std::vector< typename RefinementTree< IntervalT >::NodeT >::const_iterator iBeginLoop =
-	    std::find_if( path.begin(), path.end()
-			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {return definitely( rtree.nodesEqual( *iImgBegin, n ) ); } );
-	// loop found
-	if( iBeginLoop != path.end() )
-	{
-	    return {};
-	}
-
-	std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
-	copyPath.push_back( *iImgBegin );
 	// counterexample found
-	if( !Ariadne::definitely( rtree.isSafe( *iImgBegin ) ) )
+	if( !definitely( rtree.nodeValue( *iImgBegin ).isSafe() ) )
 	{
+	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
+	    copyPath.push_back( *iImgBegin );
 	    std::cout << "counterexample of length " << copyPath.size() << std::endl;
 	    return copyPath;
 	}
 
-	// recurse & return
-	auto posts =  rtree.postimage( *iImgBegin );
-	std::vector< typename RefinementTree< IntervalT >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
-	if( !cex.empty() )
-	    return cex;
+	// look for loop										       
+	typename std::vector< typename RefinementTree< IntervalT >::NodeT >::const_iterator iBeginLoop =
+	    std::find_if( path.begin(), path.end()
+			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {return definitely( rtree.nodesEqual( *iImgBegin, n ) ); } );
+	// no loop found
+	if( iBeginLoop == path.end() )
+	{
+	    // recurse & return
+	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
+	    copyPath.push_back( *iImgBegin );
+	    auto posts =  rtree.postimage( *iImgBegin );
+	    std::vector< typename RefinementTree< IntervalT >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
+	    if( !cex.empty() )
+		return cex;
+	}
     }
     // no counterexample found
     return {};
@@ -380,38 +381,44 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 
 // implement this using lower kleenean?
 /*! 
-  \todo enforce constness of refinement tree
   \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< IntervalT >::NodeT
-  \param beginImage and endImage iterators to beginning and end of image obtained from refinement tree
-  \return false if there definitely exists a point that is mapped to the terminal state of the counterexample, true otherwise, including if there does not possibly exist such a point 
+  \param beginImage and endImage iterators to beginning and end of image obtained from refinement tree, should dereference to typename RefinementTree< IntervalT >::NodeT as well
+  \return false if there definitely exists a point that is mapped to the terminal state of the counterexample, indeterminate otherwise, including if there does not possibly exist such a point 
+  why upper kleenean?
+  if return false, know for sure that counterexample is not spurious because a point exist with trajectory leading to unsafe state
+  if return true center point did not map along trajectory
+  \todo allow divergence from supposed counterexample, i.e. follow trajectory of center point until loop
  */
 template< typename IntervalT, typename PathIterT, typename ImageIterT >
-Ariadne::ValidatedLowerKleenean isSpurious( RefinementTree< IntervalT >& rtree
+Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& rtree
 					    , PathIterT beginCounter, PathIterT endCounter
 					    , ImageIterT beginImage, ImageIterT endImage
 					    , const Ariadne::Effort& effort )
 {
     // intersect image with first element of counterex trajectory -> new image -> recurse
-    std::vector< typename RefinementTree< IntervalT >::NodeT > intersectionImage;
+    std::vector< typename RefinementTree< IntervalT >::NodeT > mappedImage;
     for( ; beginImage != endImage; ++beginImage )
     {
-	Ariadne::UpperBoxType ubMapped =  Ariadne::image( rtree.getNodeValue( *beginImage ).getEnclosure(), rtree.getDynamics() );
-	auto mapIntersection = Ariadne::intersection( ubMapped, rtree.getNodeValue( *beginCounter ).getEnclosure() );
+	auto imagePosts = rtree.postimage( *beginImage );
+	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedCenter = rtree.dynamics().evaluate( rtree.nodeValue( *beginImage ).getEnclosure().centre() );
+	auto ipost = imagePosts.begin();
+	while( ipost != imagePosts.end() &&
+	       !possibly( rtree.nodeValue( *ipost ).getEnclosure().contains( mappedCenter ) ) )
+	    ++ipost;
+
+	// replaced in while loop above
+	// Ariadne::ValidatedLowerKleenean doesMap = trgBox.contains( mappedCentre );
+
 	// certainly cannot trace any given set -> certainly spurious
-	Ariadne::ValidatedLowerKleenean doesInter = mapIntersection.is_empty();
-	if( !possibly( doesInter ) )
+	if( ipost == imagePosts.end() )
 	    return true;
 
-	Ariadne::ValidatedLowerKleenean doesContinue = true;
+	Ariadne::ValidatedUpperKleenean doesContinue = true; // should be indeterminate
 	if( beginCounter != endCounter )
-	{
-	    auto imageMapped = rtree.image( ubMapped );
-	    doesContinue = isSpurious( rtree, beginCounter + 1, endCounter, imageMapped.begin(), imageMapped.end(), effort );
-	}
+	    doesContinue = isSpurious( rtree, beginCounter + 1, endCounter, ipost, ipost + 1, effort ); // ipost is not end, so can do +1
 
-	Ariadne::ValidatedLowerKleenean doesInterAndContinue = doesInter && doesContinue;
 	// can surely trace some set -> certainly not spurious
-	if( definitely( doesInterAndContinue ) )
+	if( definitely( doesContinue ) )
 	    return false;
     }
     // neither found instance to prove nor could disprove that the counterexample was spurious
@@ -426,14 +433,16 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
 {
-    while( rtree.getTree().size() < maxNodes )
+    while( rtree.tree().size() < maxNodes )
     {
 	std::cout << "new iteration, number of nodes " << maxNodes << std::endl;
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, imageBegin, imageEnd );
 	if( counterexample.empty() )
 	    return {};
-	if( !isSpurious( rtree, counterexample.begin(), counterexample.end(), imageBegin, imageEnd, effort ) )
+	// why definitely?
+	// negation turns upper kleenean into lower kleenean, so can only prove that it's not spurious
+	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), imageBegin, imageEnd, effort ) ) )
 	    return counterexample;
 
 	// don't want to refine last state
