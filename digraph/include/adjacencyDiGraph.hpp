@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <functional>
+#include <cmath>
 
 #include <assert.h>
 
@@ -455,7 +456,7 @@ namespace graph
     std::basic_ostream< CharT, Traits >& print( std::basic_ostream< CharT, Traits >& os, const AGRAPH& ag, const typename AGRAPH::VertexT& v
 						, const std::function< P( const typename AGRAPH::ValueT& ) >& converter = [] (const typename AGRAPH::ValueT& v) { return v; } )
     {
-	const uint segmentSize = 40;
+	const int segmentSize = 40;
 	    
 	typename DiGraphTraits< AGRAPH >::InRangeT ins = graph::inEdges( ag, v );
 	typename DiGraphTraits< AGRAPH >::OutRangeT outs = graph::outEdges( ag, v );
@@ -467,14 +468,15 @@ namespace graph
 	{
 	    if( ins.first != ins.second )
 		line << converter( graph::value( ag, graph::source( ag, *ins.first ) ) ) << " ->";
-	    line << std::setw( std::max( (size_t)0, segmentSize - line.str().size() ) );
-	    if( cEdge == floor( cEdge / 2.0 ) )
+	    line << std::setw( std::max( 0, segmentSize - static_cast< const int&& >( line.str().size() ) ) );
+	    if( cEdge == std::floor( maxInOut / 2.0 ) )
 		line << converter( graph::value( ag, v ) );
-	    line << std::setw( std::max( (size_t)0, 2 * segmentSize - line.str().size() ) );
+	    line << std::setw( std::max( 0, 2 * segmentSize - static_cast< const int&& >( line.str().size() ) ) ) << " ";
 	    if( outs.first != outs.second )
-		line << "<- " << converter( graph::value( ag, graph::target( ag, *outs.first ) ) );
+	    	line << "-> " << converter( graph::value( ag, graph::target( ag, *outs.first ) ) );
 	    os << line.str() << std::endl;
-	    line.flush();
+	    line.str( std::string() );
+	    
 	    if( ins.first != ins.second )
 		++ins.first;
 	    if( outs.first != outs.second )
@@ -495,8 +497,9 @@ namespace graph
 	typename DiGraphTraits< AGRAPH >::VRangeT vs = graph::vertices( ag );
 	for( ; vs.first != vs.second; ++vs.first )
 	{
-	    std::cout << std::distance( vs.first, vs.second ) << "   :";
+	    // std::cout << std::distance( vs.first, vs.second ) << "   :";
 	    print( os, ag, *vs.first, converter );
+	    os << std::endl;
 	}
 	return os;
     }
