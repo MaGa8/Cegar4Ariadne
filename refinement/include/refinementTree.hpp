@@ -55,6 +55,7 @@ class RefinementTree
 	    Ariadne::LowerKleenean areEq = this->mEnclosure == tv.mEnclosure;
 	    return definitely( areEq );
 	}
+	
       private:
 	EnclosureT mEnclosure;
 	Ariadne::ValidatedLowerKleenean mSafe;
@@ -76,7 +77,7 @@ class RefinementTree
 		    )
 	: mConstraints( constraints )
 	, mDynamics( dynamics )
-	, mRefinements( TreeValue( initial, constraints.overlaps( initial ).check( effort ) ) )
+	, mRefinements( TreeValue( initial, constraints.covers( initial ).check( effort ) ) )
 	, mEffort( effort )
     {
 	NodeT initialNode = *addVertex( mMappings, root( mRefinements ) );
@@ -260,10 +261,11 @@ class RefinementTree
     	std::array< TreeValue, RefinementT::N > tvals;
 
 	std::transform( refined.begin(), refined.end(), tvals.begin()
-    			, [this] (const EnclosureT& e) { return TreeValue( e, mConstraints.overlaps( e ).check( mEffort ) ); } );
+    			, [this] (const EnclosureT& e) { return TreeValue( e, mConstraints.covers( e ).check( mEffort ) ); } );
 
 	tree::expand( mRefinements, treev, tvals );
     	// add expansions to the graph
+	std::cout << "extend graph " << std::endl;
     	std::pair< typename RefinementT::CIterT, typename RefinementT::CIterT > cs = tree::children( mRefinements, treev );
     	std::vector< NodeT > refinedNodes;
     	for( ; cs.first != cs.second; ++cs.first )
@@ -272,6 +274,8 @@ class RefinementTree
     	    refinedNodes.push_back( *ivadd );
     	}
 
+	std::cout << "getting pre & post images" << std::endl;
+	
     	// add edges
 	// NO! NONE OF THIS WORKS! EDGES MAY APPEAR "OUT OF NOTHING" DUE TO THE WAY BOXES ARE SAID TO MAP INTO EACH OTHER! --->
 	// misunderstanding...
@@ -281,9 +285,11 @@ class RefinementTree
 	// simply adding v is fine, because pres and posts will be traced down to leaf
 	pres.push_back( v );
 	posts.push_back( v );
-	
+
+	std::cout << "adapting pre & post images" << std::endl;
     	for( NodeT& refined : refinedNodes )
     	{
+	    std::cout << "next node ... " << std::endl;
     	    // determine which elements of the preimage of v map to which refined component
     	    for( NodeT& pre : pres )
     	    {
@@ -303,6 +309,9 @@ class RefinementTree
     		}
     	    }
     	}
+
+	std::cout << "remove refined vertex" << std::endl;
+	
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
 
@@ -320,6 +329,8 @@ class RefinementTree
 	
 	// unlink v from the graph
 	graph::removeVertex( mMappings, v );
+
+	std::cout << "done refining" << std::endl;
     }
 
   private:
@@ -331,17 +342,18 @@ class RefinementTree
 };
 
 /*!
-  SHOULDN'T I USE REFINEMENT TREE NODES RATHER THAN BARE BONES TREE NODES?
+  SHOULDN'T I USE REFINEMENT TREE NODES RATHER THAN BARE BONES TREE NODES? why?!
 
   runs DFS to find counterexample
   any path terminates in
   1) loop leading back to state along path
   2) state with violated safety conditions
   \param initialBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to box
-  \return vector of nodes terminated by an unsafe node in REVERSE ORDER (terminal state first)
+  \return vector of nodes terminated by a possibly unsafe node
   \todo add parameter to control ordering of branches in dfs exploration 
   \todo speed up: use references in vector storing path passed to recursive calls -> don't need to copy nodes
   \todo use const refinement tree once constness issues in tree+graph are fixed
+  \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
 template< typename IntervalT, typename NodeIterT >
 std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( RefinementTree< IntervalT >& rtree
@@ -350,12 +362,15 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 {
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
     {
+	// std::cout << "looking for counterex at " << rtree.nodeValue( *iImgBegin ).getEnclosure()
+		  // << " which is " << rtree.nodeValue( *iImgBegin ).isSafe() << " safe " << std::endl;
+
 	// counterexample found
 	if( !definitely( rtree.nodeValue( *iImgBegin ).isSafe() ) )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
-	    std::cout << "counterexample of length " << copyPath.size() << std::endl;
+	    // std::cout << "counterexample of length " << copyPath.size() << std::endl;
 	    return copyPath;
 	}
 
@@ -366,6 +381,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	// no loop found
 	if( iBeginLoop == path.end() )
 	{
+	    // std::cout << "no loop, recurse!" << std::endl;
 	    // recurse & return
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
@@ -376,6 +392,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	}
     }
     // no counterexample found
+    // std::cout << "nothing found, go home now" << std::endl;
     return {};
 }
 
@@ -418,6 +435,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 	    doesContinue = isSpurious( rtree, beginCounter + 1, endCounter, ipost, ipost + 1, effort ); // ipost is not end, so can do +1
 
 	// can surely trace some set -> certainly not spurious
+	// READ THIS! \todo should add condition: unsafe node needs to be separate from safe set
 	if( definitely( doesContinue ) )
 	    return false;
     }
@@ -426,6 +444,12 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 }
 
 // can only prove that there exists a true counterexample -> system is unsafe
+/*
+  find counterexample: 
+  (1) if eventually possibly unsafe -> refine                              not( definitely( covers( safeSet, bx ) )
+  (2) if eventually definitely unsafe  and  not spurious -> return         definitely( separate( safeSet, bx ) )      
+  (2) is subcase of (1)
+ */
 template< typename IntervalT, typename ImageIterT >
 std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree< IntervalT >& rtree
 								  , ImageIterT imageBegin, ImageIterT imageEnd
@@ -433,21 +457,60 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
 {
+    // \todo test wether repopulating image anew every iteration
+    // or identifying and removing refined nodes is more efficient
+    std::vector< typename RefinementTree< IntervalT >::NodeT > initialImage( imageBegin, imageEnd );
+    
     while( rtree.tree().size() < maxNodes )
     {
-	std::cout << "new iteration, number of nodes " << maxNodes << std::endl;
-	// look for counterexample
-	auto counterexample = findCounterexample( rtree, imageBegin, imageEnd );
-	if( counterexample.empty() )
-	    return {};
-	// why definitely?
-	// negation turns upper kleenean into lower kleenean, so can only prove that it's not spurious
-	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), imageBegin, imageEnd, effort ) ) )
-	    return counterexample;
+	std::cout << "new iteration, number of nodes " << rtree.tree().size() << "/" << maxNodes << std::endl;
 
-	// don't want to refine last state
-	for( uint i = 0; i < counterexample.size() - 1; ++i )
+	// std::cout << "graph " << std::endl;
+	// std::function< Ariadne::Box< IntervalT >( const typename RefinementTree< IntervalT >::MappingT::ValueT& ) > conv = [&rtree] (const typename RefinementTree< IntervalT >::RefinementT::NodeT& v) -> Ariadne::ExactBoxType { return tree::value( rtree.tree(), v ).getEnclosure(); };
+	// graph::print( std::cout, rtree.leafMapping(), conv );
+	
+	// look for counterexample
+	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
+	if( counterexample.empty() )
+	{
+	    std::cout << "no counterexample found" << std::endl;
+	    return std::vector< typename RefinementTree< IntervalT >::NodeT >();
+	}
+
+	std::cout << "found counterexample " << std::endl;
+	for( auto trajNode : counterexample )
+	    std::cout << rtree.nodeValue( trajNode ).getEnclosure() << "  ->  ";
+	std::cout << std::endl;
+
+	// Ariadne::Box< IntervalT > unsafeBox = 
+	bool definitelyNotSpurious = definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), imageBegin, imageEnd, effort ) )
+		, definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
+	if( definitelyNotSpurious && definitelyUnsafe )
+	{
+	    std::cout << "non spurious counterexample found" << std::endl;
+	    return counterexample;
+	}
+
+	// want to refine last state as well
+	for( uint i = 0; i < counterexample.size(); ++i )
+	{
+	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
 	    rtree.refine( counterexample[ i ], refinementStrat );
+	}
+
+	std::cout << "collecting image in refined tree" << std::endl;
+
+
+	// this is a performance hog! problem: does add all, regardless of distinctness -> branches out the more iterations there are
+	std::vector< typename RefinementTree< IntervalT >::NodeT > newInitialImage;
+	for( typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
+	{
+	    auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
+	    newInitialImage.insert( newInitialImage.end(), imageNow.begin(), imageNow.end() );
+	}
+	initialImage = std::move( newInitialImage );
+
+	std::cout << "cegar iteration done " << std::endl;
     }
     return {};
 }
