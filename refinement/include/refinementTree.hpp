@@ -27,24 +27,31 @@ class RefinementTree
 	TreeValue()
 	    : mEnclosure( Ariadne::Box< IntervalT >::zero( 0 ) )
 	    , mSafe( false )
+	    , mId( -1 )                     // should give some weird value that's easy to spot
 	{}
 	
-	TreeValue( const EnclosureT& e, Ariadne::ValidatedLowerKleenean safe )
-	    : mEnclosure( e )
+	TreeValue( const unsigned long& id, const EnclosureT& e, Ariadne::ValidatedLowerKleenean safe )
+	    : mId( id )
+	    , mEnclosure( e )
 	    , mSafe( safe )
+
 	{}
 
 	TreeValue( const TreeValue& orig )
-	    : mEnclosure( orig.mEnclosure )
+	    : mId( orig.mId )
+	    , mEnclosure( orig.mEnclosure )
 	    , mSafe( orig.mSafe )
 	{}
 
 	TreeValue& operator =( const TreeValue& orig )
 	{
+	    this->mId = orig.mId;
 	    this->mEnclosure = orig.mEnclosure;
 	    this->mSafe = orig.mSafe;
 	    return *this;
 	}
+
+	const unsigned long& id() { return mId; }
 
 	const EnclosureT& getEnclosure() const { return mEnclosure; }
 
@@ -52,11 +59,11 @@ class RefinementTree
 
 	bool operator ==( const TreeValue& tv )
 	{
-	    Ariadne::LowerKleenean areEq = this->mEnclosure == tv.mEnclosure;
-	    return definitely( areEq );
+	    return this->mId == tv.mId;
 	}
 	
       private:
+	unsigned long mId;
 	EnclosureT mEnclosure;
 	Ariadne::ValidatedLowerKleenean mSafe;
     };
@@ -77,7 +84,7 @@ class RefinementTree
 		    )
 	: mConstraints( constraints )
 	, mDynamics( dynamics )
-	, mRefinements( TreeValue( initial, constraints.covers( initial ).check( effort ) ) )
+	, mRefinements( TreeValue( 0, initial, constraints.covers( initial ).check( effort ) ) )
 	, mEffort( effort )
     {
 	NodeT initialNode = *addVertex( mMappings, root( mRefinements ) );
@@ -260,12 +267,18 @@ class RefinementTree
     	// std::vector< TreeValue > tvals;
     	std::array< TreeValue, RefinementT::N > tvals;
 
-	std::transform( refined.begin(), refined.end(), tvals.begin()
-    			, [this] (const EnclosureT& e) { return TreeValue( e, mConstraints.covers( e ).check( mEffort ) ); } );
+	for( uint i = 0; i < refined.size(); ++i )
+	{
+	    const EnclosureT& refd = refined[ i ];
+	    tvals[ i ] = TreeValue( tree().size() + i, refined[ i ], constraints().covers( refined[ i ] ).check( mEffort ) );
+	}
+	
+	// std::transform( refined.begin(), refined.end(), tvals.begin()
+    	// 		, [this] (const EnclosureT& e) { return TreeValue( e, mConstraints.covers( e ).check( mEffort ) ); } );
 
 	tree::expand( mRefinements, treev, tvals );
     	// add expansions to the graph
-	std::cout << "extend graph " << std::endl;
+	// std::cout << "extend graph " << std::endl;
     	std::pair< typename RefinementT::CIterT, typename RefinementT::CIterT > cs = tree::children( mRefinements, treev );
     	std::vector< NodeT > refinedNodes;
     	for( ; cs.first != cs.second; ++cs.first )
@@ -274,7 +287,7 @@ class RefinementTree
     	    refinedNodes.push_back( *ivadd );
     	}
 
-	std::cout << "getting pre & post images" << std::endl;
+	// std::cout << "getting pre & post images" << std::endl;
 	
     	// add edges
 	// NO! NONE OF THIS WORKS! EDGES MAY APPEAR "OUT OF NOTHING" DUE TO THE WAY BOXES ARE SAID TO MAP INTO EACH OTHER! --->
@@ -286,10 +299,10 @@ class RefinementTree
 	pres.push_back( v );
 	posts.push_back( v );
 
-	std::cout << "adapting pre & post images" << std::endl;
+	// std::cout << "adapting pre & post images" << std::endl;
     	for( NodeT& refined : refinedNodes )
     	{
-	    std::cout << "next node ... " << std::endl;
+	    // std::cout << "next node ... " << std::endl;
     	    // determine which elements of the preimage of v map to which refined component
     	    for( NodeT& pre : pres )
     	    {
@@ -310,7 +323,7 @@ class RefinementTree
     	    }
     	}
 
-	std::cout << "remove refined vertex" << std::endl;
+	// std::cout << "remove refined vertex" << std::endl;
 	
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
@@ -330,7 +343,7 @@ class RefinementTree
 	// unlink v from the graph
 	graph::removeVertex( mMappings, v );
 
-	std::cout << "done refining" << std::endl;
+	// std::cout << "done refining" << std::endl;
     }
 
   private:
