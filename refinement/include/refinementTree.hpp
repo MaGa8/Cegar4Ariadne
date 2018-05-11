@@ -522,18 +522,23 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	{
 	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
 	    rtree.refine( counterexample[ i ], refinementStrat );
+	    auto refinedImg = rtree.image( rtree.nodeValue( counterexample[ i ] ).getEnclosure() );
+	    initialImage.erase( counterexample[ i ] );
+	    initialImage.insert( refinedImg.begin(), refinedImg.end() );
 	}
 
 	std::cout << "collecting image in refined tree" << std::endl;
 
-	// this is a performance hog! problem: does add all, regardless of distinctness -> branches out the more iterations there are
-	NodeSet newInitialImage = NodeSet( NodeComparator( rtree ) );
-	for( const typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
-	{
-	    auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
-	    newInitialImage.insert( imageNow.begin(), imageNow.end() );
-	}
-	initialImage = std::move( newInitialImage );
+	// \todo test against this code
+	// replaced by code in for loop over counterexs above
+	// NodeSet newInitialImage = NodeSet( NodeComparator( rtree ) );
+	// for( const typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
+	// {
+	//     auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
+	    
+	//     newInitialImage.insert( imageNow.begin(), imageNow.end() );
+	// }
+	// initialImage = std::move( newInitialImage );
 
 	std::cout << "cegar iteration done " << std::endl;
     }
