@@ -11,6 +11,8 @@
 #include "function/constraint.hpp"
 
 #include <exception>
+#include <set>
+#include <functional>
 
 template< typename I >
 class RefinementTree
@@ -51,7 +53,7 @@ class RefinementTree
 	    return *this;
 	}
 
-	const unsigned long& id() { return mId; }
+	const unsigned long& id() const { return mId; }
 
 	const EnclosureT& getEnclosure() const { return mEnclosure; }
 
@@ -278,7 +280,6 @@ class RefinementTree
 
 	tree::expand( mRefinements, treev, tvals );
     	// add expansions to the graph
-	// std::cout << "extend graph " << std::endl;
     	std::pair< typename RefinementT::CIterT, typename RefinementT::CIterT > cs = tree::children( mRefinements, treev );
     	std::vector< NodeT > refinedNodes;
     	for( ; cs.first != cs.second; ++cs.first )
@@ -286,8 +287,6 @@ class RefinementTree
 	    typename MappingT::VIterT ivadd = graph::addVertex( mMappings, *cs.first );
     	    refinedNodes.push_back( *ivadd );
     	}
-
-	// std::cout << "getting pre & post images" << std::endl;
 	
     	// add edges
 	// NO! NONE OF THIS WORKS! EDGES MAY APPEAR "OUT OF NOTHING" DUE TO THE WAY BOXES ARE SAID TO MAP INTO EACH OTHER! --->
@@ -299,10 +298,8 @@ class RefinementTree
 	pres.push_back( v );
 	posts.push_back( v );
 
-	// std::cout << "adapting pre & post images" << std::endl;
     	for( NodeT& refined : refinedNodes )
     	{
-	    // std::cout << "next node ... " << std::endl;
     	    // determine which elements of the preimage of v map to which refined component
     	    for( NodeT& pre : pres )
     	    {
@@ -323,8 +320,6 @@ class RefinementTree
     	    }
     	}
 
-	// std::cout << "remove refined vertex" << std::endl;
-	
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
 
@@ -342,8 +337,6 @@ class RefinementTree
 	
 	// unlink v from the graph
 	graph::removeVertex( mMappings, v );
-
-	// std::cout << "done refining" << std::endl;
     }
 
   private:
@@ -470,9 +463,29 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
 {
+    class NodeComparator
+    {
+      public:
+	NodeComparator( const RefinementTree< IntervalT >& rtree ) : mRtree( rtree ) {}
+		       
+	// NodeComparator( const NodeComparator& orig ) : mRtree( orig.mRtree ) {}
+
+	// NodeComparator& operator =( const NodeComparator& orig ) { mRtree = orig.mRtree; return *this; }
+
+	bool operator ()( const typename RefinementTree< IntervalT >::NodeT& n1
+		       , const typename RefinementTree< IntervalT >::NodeT& n2 ) const
+	{
+	    return mRtree.get().nodeValue( n1 ).id() < mRtree.get().nodeValue( n2 ).id();
+	}
+
+      private:
+	std::reference_wrapper< const RefinementTree< IntervalT > > mRtree;
+    };
+
     // \todo test wether repopulating image anew every iteration
     // or identifying and removing refined nodes is more efficient
-    std::vector< typename RefinementTree< IntervalT >::NodeT > initialImage( imageBegin, imageEnd );
+    typedef std::set< typename RefinementTree< IntervalT >::NodeT, NodeComparator > NodeSet;
+    NodeSet initialImage( imageBegin, imageEnd, NodeComparator( rtree ) );
     
     while( rtree.tree().size() < maxNodes )
     {
@@ -513,13 +526,12 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 
 	std::cout << "collecting image in refined tree" << std::endl;
 
-
 	// this is a performance hog! problem: does add all, regardless of distinctness -> branches out the more iterations there are
-	std::vector< typename RefinementTree< IntervalT >::NodeT > newInitialImage;
-	for( typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
+	NodeSet newInitialImage = NodeSet( NodeComparator( rtree ) );
+	for( const typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
 	{
 	    auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
-	    newInitialImage.insert( newInitialImage.end(), imageNow.begin(), imageNow.end() );
+	    newInitialImage.insert( imageNow.begin(), imageNow.end() );
 	}
 	initialImage = std::move( newInitialImage );
 
