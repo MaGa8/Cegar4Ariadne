@@ -140,8 +140,21 @@ class RefinementTree
 	return constImage;
     }
 
+    //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
+    //! \param subtreeRoot require leaves to be rooted at this node
+    //! \return most refined boxes intersecting with from
+    template< typename EnclosureT2 >
+    std::vector< NodeT > image( const EnclosureT2& from, const NodeT& subtreeRoot )
+    {
+	return imageRecursive( from, graph::value( leafMapping(), subtreeRoot ) );
+    }
+
     // helper function for recursive calls of image
     // abstract same code as leaves in DFS controller
+    /*!
+      \param from enclosure whose image to find
+      \param to image boxes located in subtree rooted at to
+    */
     template< typename EnclosureT2 >
     std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to ) const
     {
@@ -405,7 +418,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 // implement this using lower kleenean?
 /*! 
   \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< IntervalT >::NodeT
-  \param beginImage and endImage iterators to beginning and end of image obtained from refinement tree, should dereference to typename RefinementTree< IntervalT >::NodeT as well
+  \param beginImage and endImage iterators to beginning and end of image of initial set obtained from refinement tree, should dereference to typename RefinementTree< IntervalT >::NodeT as well
   \return false if there definitely exists a point that is mapped to the terminal state of the counterexample, indeterminate otherwise, including if there does not possibly exist such a point 
   why upper kleenean?
   if return false, know for sure that counterexample is not spurious because a point exist with trajectory leading to unsafe state
@@ -456,9 +469,17 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
   (2) if eventually definitely unsafe  and  not spurious -> return         definitely( separate( safeSet, bx ) )      
   (2) is subcase of (1)
  */
-template< typename IntervalT, typename ImageIterT >
+/*!
+  \param rtree refinement tree to work on
+  \param initialBegin begin of range of set of boxes describing the initial state
+  \param effort effort to use for calculations
+  \param refinementStrat strategy to use for refining individual box
+  \param maxNodes number of nodes in tree after which to stop iterations
+  \return sequence of nodes that forms a trajectory starting from the initial set
+ */
+template< typename IntervalT, typename InitialIterT >
 std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree< IntervalT >& rtree
-								  , ImageIterT imageBegin, ImageIterT imageEnd
+								  , InitialIterT initialBegin, InitialIterT initialEnd
 								  , const Ariadne::Effort& effort
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
@@ -485,7 +506,13 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
     // \todo test wether repopulating image anew every iteration
     // or identifying and removing refined nodes is more efficient
     typedef std::set< typename RefinementTree< IntervalT >::NodeT, NodeComparator > NodeSet;
-    NodeSet initialImage( imageBegin, imageEnd, NodeComparator( rtree ) );
+    NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
+
+    for( InitialIterT iInit = initialBegin; iInit != initialEnd; ++iInit )
+    {
+	auto img = rtree.image( *iInit );
+	initialImage.insert( img.begin(), img.end() );
+    }
     
     while( rtree.tree().size() < maxNodes )
     {
@@ -509,7 +536,9 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	std::cout << std::endl;
 
 	// Ariadne::Box< IntervalT > unsafeBox = 
-	bool definitelyNotSpurious = definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), imageBegin, imageEnd, effort ) )
+	bool definitelyNotSpurious = definitely( !isSpurious( rtree
+							      , counterexample.begin(), counterexample.end()
+							      , initialImage.begin(), initialImage.end(), effort ) )
 		, definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
@@ -522,9 +551,15 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	{
 	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
 	    rtree.refine( counterexample[ i ], refinementStrat );
-	    auto refinedImg = rtree.image( rtree.nodeValue( counterexample[ i ] ).getEnclosure() );
+	    // iterate over components of initial set and add their images starting from refined node for best performance
+	    for( InitialIterT iInit = initialBegin; iInit != initialEnd; ++iInit )
+	    {
+		const typename  RefinementTree< IntervalT >::NodeT& cexNode = counterexample[ i ];
+		auto refinedImg = rtree.image( *iInit, cexNode );
+		initialImage.insert( refinedImg.begin(), refinedImg.end() );
+	    }
+	    
 	    initialImage.erase( counterexample[ i ] );
-	    initialImage.insert( refinedImg.begin(), refinedImg.end() );
 	}
 
 	std::cout << "collecting image in refined tree" << std::endl;
