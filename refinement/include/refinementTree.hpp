@@ -13,6 +13,7 @@
 #include <exception>
 #include <set>
 #include <functional>
+#include <algorithm>
 
 template< typename I >
 class RefinementTree
@@ -431,35 +432,62 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 					    , ImageIterT beginImage, ImageIterT endImage
 					    , const Ariadne::Effort& effort )
 {
-    // intersect image with first element of counterex trajectory -> new image -> recurse
-    std::vector< typename RefinementTree< IntervalT >::NodeT > mappedImage;
-    for( ; beginImage != endImage; ++beginImage )
+    typedef RefinementTree< IntervalT > Rtree;
+    // one or less nodes in counterexample
+    if( beginCounter + 1 >= endCounter )
+	return false;
+    // center is not contained in initial image
+    if( std::none_of( beginImage, endImage,
+		      [&rtree, &beginCounter, &effort] (const typename Rtree::EnclosureT& imgEnc)
+		      {
+			  const typename Rtree::EnclosureT& startCexEnc = rtree.nodeValue( *beginCounter ).getEnclosure();
+			  Ariadne::Kleenean contained = possibly( imgEnc.contains( startCexEnc.centre() ) );
+			  return possibly( contained.check( effort ) );
+		      } ) )
+	return true;
+	
+    Ariadne::Box< IntervalT > currBox = rtree.nodeValue( *beginCounter ).getEnclosure();
+    for( ; beginCounter != endCounter - 1; ++beginCounter )
     {
-	auto imagePosts = rtree.postimage( *beginImage );
-	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedCenter = rtree.dynamics().evaluate( rtree.nodeValue( *beginImage ).getEnclosure().centre() );
-	auto ipost = imagePosts.begin();
-	while( ipost != imagePosts.end() &&
-	       !possibly( rtree.nodeValue( *ipost ).getEnclosure().contains( mappedCenter ) ) )
-	    ++ipost;
-
-	// replaced in while loop above
-	// Ariadne::ValidatedLowerKleenean doesMap = trgBox.contains( mappedCentre );
-
-	// certainly cannot trace any given set -> certainly spurious
-	if( ipost == imagePosts.end() )
-	    return true;
-
-	Ariadne::ValidatedUpperKleenean doesContinue = true; // should be indeterminate
-	if( beginCounter != endCounter )
-	    doesContinue = isSpurious( rtree, beginCounter + 1, endCounter, ipost, ipost + 1, effort ); // ipost is not end, so can do +1
-
-	// can surely trace some set -> certainly not spurious
-	// READ THIS! \todo should add condition: unsafe node needs to be separate from safe set
-	if( definitely( doesContinue ) )
-	    return false;
+	Ariadne::Box< IntervalT > nextBox = rtree.nodeValue( *(beginCounter + 1) ).getEnclosure();
+	if( definitely( !nextBox.contains( currBox.centre() ) ) )
+	    return true; // should be indeterminate
+	currBox = nextBox;
     }
-    // neither found instance to prove nor could disprove that the counterexample was spurious
-    return true;
+    return false;
+    
+    
+    // // intersect image with first element of counterex trajectory -> new image -> recurse
+    // std::vector< typename RefinementTree< IntervalT >::NodeT > mappedImage;
+    // for( ; beginImage != endImage; ++beginImage )
+    // {
+    // 	auto imagePosts = rtree.postimage( *beginImage );
+    // 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedCenter = rtree.dynamics().evaluate( rtree.nodeValue( *beginImage ).getEnclosure().centre() );
+    // 	auto ipost = imagePosts.begin();
+    // 	while( ipost != imagePosts.end() &&
+    // 	       !possibly( rtree.nodeValue( *ipost ).getEnclosure().contains( mappedCenter ) ) )
+    // 	    ++ipost;
+	
+    // 	// replaced in while loop above
+    // 	// Ariadne::ValidatedLowerKleenean doesMap = trgBox.contains( mappedCentre );
+
+    // 	// certainly cannot trace any given set -> certainly spurious
+    // 	if( ipost == imagePosts.end() )
+    // 	    return true;
+
+    // 	Ariadne::ValidatedUpperKleenean continueSpurious = true; // should be indeterminate
+    // 	if( beginCounter != endCounter )
+    // 	    continueSpurious = isSpurious( rtree, beginCounter + 1, endCounter, ipost, ipost + 1, effort ); // ipost is not end, so can do +1
+
+    // 	DO NOT HANDLE OTHER CASE: CURRENT BOX IS COMPLETELY UNSAFE -> this should be the last one
+
+    // 	// can surely trace some set -> certainly not spurious
+    // 	// READ THIS! \todo should add condition: unsafe node needs to be separate from safe set
+    // 	if( definitely( !continueSpurious ) )
+    // 	    return false;
+    // }
+    // // neither found instance to prove nor could disprove that the counterexample was spurious
+    // return true; // should be indeterminate
 }
 
 // can only prove that there exists a true counterexample -> system is unsafe
@@ -538,13 +566,18 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	// Ariadne::Box< IntervalT > unsafeBox = 
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
-							      , initialImage.begin(), initialImage.end(), effort ) )
-		, definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
+							      , initialBegin, initialEnd
+							      , effort ) )
+	    , definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
 	    std::cout << "non spurious counterexample found" << std::endl;
 	    return counterexample;
 	}
+	else if( !definitelyNotSpurious )
+	    std::cout << "it's spurious" << std::endl;
+	else
+	    std::cout << "terminal node is not completely unsafe" << std::endl;
 
 	// want to refine last state as well
 	for( uint i = 0; i < counterexample.size(); ++i )

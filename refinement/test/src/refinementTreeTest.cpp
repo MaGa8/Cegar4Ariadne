@@ -392,7 +392,7 @@ bool RefinementTreeTest::PositiveCounterexampleTest::check() const
     auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );
 
     std::cout << "is counterexample spurious? "
-	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), initImage.begin(), initImage.end(), effort )
+	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), effort )
 	      << std::endl;
 
     if( cexPath.empty() )
