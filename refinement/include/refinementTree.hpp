@@ -14,6 +14,7 @@
 #include <set>
 #include <functional>
 #include <algorithm>
+#include <limits>
 
 template< typename I >
 class RefinementTree
@@ -70,10 +71,37 @@ class RefinementTree
 	EnclosureT mEnclosure;
 	Ariadne::ValidatedLowerKleenean mSafe;
     };
-
+    
     typedef tree::LinkedFixedBranchTree< TreeValue, 2 > RefinementT;
     typedef graph::AdjacencyDiGraph< typename RefinementT::NodeT, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
+
+    //! \return box containing the entire state space representable by doubles
+    static Ariadne::Box< IntervalT > universeBox( size_t dimension )
+    {
+	Ariadne::Array< IntervalT > is( dimension );
+	std::generate( is.begin(), dimension, [] () { return IntervalT( std::numeric_limits< double >::min()
+									, std::numeric_limits< double >::max() ); } );
+	return Ariadne::Box< IntervalT >( Ariadne::Vector< IntervalT >( is ) );
+    }
+
+    //! \return perform nsplits on toSplit on dimension ndim
+    //! \todo move to refiner class
+    static std::vector< Ariadne::Box< IntervalT > > splitN( const Ariadne::Box< IntervalT >& toSplit, size_t ndim, size_t nsplits )
+    {
+	Ariadne::Array< IntervalT > intervals = toSplit.array();
+	const typename IntervalT::LowerBoundType& l = toSplit.get( ndim ).lower();
+	const typename IntervalT::UpperBoundType& u = toSplit.get( ndim ).upper();
+	const typename IntervalT::WidthType modW = toSplit.get( ndim ).width() / nsplits;
+	std::vector< Ariadne::Box< IntervalT > > splits;
+	splits.reserve( nsplits );
+	for( uint i = 0; i < nsplits; ++i )
+	{
+	    intervals[ ndim ] = IntervalT( l + i * modW, l + (i + 1) * modW );
+	    splits.emplace_back( intervals );
+	}
+	return splits;
+    }
 
     /*!
       \param initial abstraction using a single box
@@ -87,7 +115,11 @@ class RefinementTree
 		    )
 	: mConstraints( constraints )
 	, mDynamics( dynamics )
-	, mRefinements( TreeValue( 0, initial, constraints.covers( initial ).check( effort ) ) )
+	, mRefinements( TreeValue( 0, initial, constraints.covers( initial ).check( effort )
+				   
+				   //				   , universeBox( initial.dimension() )
+				   //, constraints.covers( universeBox( initial.dimension() ) ).check( effort )
+				   ) )
 	, mEffort( effort )
     {
 	NodeT initialNode = *addVertex( mMappings, root( mRefinements ) );
@@ -359,6 +391,7 @@ class RefinementTree
     Ariadne::Effort mEffort;
     RefinementT mRefinements;
     MappingT mMappings;
+    NodeT mIsUnsafeNode;
 };
 
 /*!
