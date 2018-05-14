@@ -363,50 +363,50 @@ class RefinementTree
 	    refinedNodes.push_back( addToGraph( refd ) );
 	}
 	
-    	// // add edges
-	// std::vector< NodeT > pres( preimage( v ) );
-	// std::vector< NodeT > posts( postimage( v ) );
-	// // append all children of refined node, because center mapping refinements may introduce new links absent at parent level
-	// // simply adding v is fine, because pres and posts will be traced down to leaf
-	// pres.push_back( v );
-	// posts.push_back( v );
+    	// add edges
+	std::vector< NodeT > pres( preimage( v ) );
+	std::vector< NodeT > posts( postimage( v ) );
+	// append all children of refined node, because center mapping refinements may introduce new links absent at parent level
+	// simply adding v is fine, because pres and posts will be traced down to leaf
+	pres.push_back( v );
+	posts.push_back( v );
 
-    	// for( NodeT& refined : refinedNodes )
-    	// {
-    	//     // determine which elements of the preimage of v map to which refined component
-    	//     for( NodeT& pre : pres )
-    	//     {
-    	// 	for( NodeT& preLeaf : leaves( pre ) )
-    	// 	{
-    	// 	    if( possibly( isReachable( preLeaf, refined ) ) )
-	// 		graph::addEdge( mMappings, preLeaf, refined );
-    	// 	}
-    	//     }
-    	//     // determine which elements of the postimage the components of v map to
-    	//     for( NodeT& post : posts )
-    	//     {
-    	// 	for( NodeT& postLeaf : leaves( post ) )
-    	// 	{
-	// 	    if( possibly( isReachable( refined, postLeaf ) ) )
-	// 		graph::addEdge( mMappings, refined, postLeaf );
-    	// 	}
-    	//     }
-    	// }
+    	for( NodeT& refined : refinedNodes )
+    	{
+    	    // determine which elements of the preimage of v map to which refined component
+    	    for( NodeT& pre : pres )
+    	    {
+    		for( NodeT& preLeaf : leaves( pre ) )
+    		{
+    		    if( possibly( isReachable( preLeaf, refined ) ) )
+			graph::addEdge( mMappings, preLeaf, refined );
+    		}
+    	    }
+    	    // determine which elements of the postimage the components of v map to
+    	    for( NodeT& post : posts )
+    	    {
+    		for( NodeT& postLeaf : leaves( post ) )
+    		{
+		    if( possibly( isReachable( refined, postLeaf ) ) )
+			graph::addEdge( mMappings, refined, postLeaf );
+    		}
+    	    }
+    	}
 
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
 
-	auto lvs = leaves( tree::root( mRefinements ) );
-	for( NodeT& refined : refinedNodes )
-	{
-	    for( NodeT& lf : lvs )
-	    {
-		if( possibly( isReachable( lf, refined ) ) )
-		    graph::addEdge( mMappings, lf, refined );
-		if( possibly( isReachable( refined, lf ) ) )
-		    graph::addEdge( mMappings, refined, lf );
-	    }
-	}
+	// auto lvs = leaves( tree::root( mRefinements ) );
+	// for( NodeT& refined : refinedNodes )
+	// {
+	//     for( NodeT& lf : lvs )
+	//     {
+	// 	if( possibly( isReachable( lf, refined ) ) )
+	// 	    graph::addEdge( mMappings, lf, refined );
+	// 	if( possibly( isReachable( refined, lf ) ) )
+	// 	    graph::addEdge( mMappings, refined, lf );
+	//     }
+	// }
 	
 	// unlink v from the graph
 	removeFromGraph( v );
@@ -660,11 +660,10 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
 	    rtree.refine( counterexample[ i ], refinementStrat );
 	    // iterate over components of initial set and add their images starting from refined node for best performance
-	    for( typename NodeSet::iterator iInit = initialImage.begin(); iInit != initialImage.end(); ++iInit )
+	    for( const typename RefinementTree< IntervalT >::NodeT& initial : initialImage )
 	    {
 		const typename  RefinementTree< IntervalT >::NodeT& cexNode = counterexample[ i ];
-		// rather use leaf method
-		auto refinedImg = rtree.image( rtree.nodeValue( *iInit ).getEnclosure(), cexNode );
+		auto refinedImg = rtree.image( rtree.nodeValue( initialImage ).getEnclosure(), cexNode );
 		initialImage.insert( refinedImg.begin(), refinedImg.end() );
 	    }
 	    
