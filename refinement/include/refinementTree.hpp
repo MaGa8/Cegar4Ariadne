@@ -91,6 +91,37 @@ class RefinementTree
 	typename MappingT::VertexT mGraphNode;
     };
 
+    //! \class abstract base class for value to store in graph
+    struct IGraphValue
+    {
+	constexpr bool isInside() const = 0;
+    };
+
+    //! \class value to store in graph of region inside first initial abstraction
+    class InsideGraphValue : public IGraphValue
+    {
+      public:
+	InsideGraphValue( typename RefinementT::NodeT& treeNode )
+	    : mTreeNode( treeNode )
+	{}
+
+	InsideGraphValue( const InsideGraphValue& orig ) = default;
+
+	InsideGraphValue& operator =( const InsideGraphValue& orig ) = default;
+
+	const typename RefinementT::NodeT& treeNode() const { return mTreeNode; }
+
+	constexpr bool isInside() const { return true; }
+      private:
+	typename RefinementT::NodeT mTreeNode;
+    };
+
+    //! \class value to store in graph of region outside first initial abstractio
+    struct OutsideGraphValue : public IGraphValue
+    {
+	constexpr bool isInside() const { return false; }
+    };
+
     //! \return box containing the entire state space representable by doubles
     static Ariadne::Box< IntervalT > universeBox( size_t dimension )
     {
@@ -553,7 +584,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
  */
 template< typename IntervalT >
 std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree< IntervalT >& rtree
-								  , typename RefinementTree< IntervalT >::EnclosureT initialSet
+								  , const typename RefinementTree< IntervalT >::EnclosureT& initialSet
 								  , const Ariadne::Effort& effort
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
@@ -632,7 +663,8 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    for( typename NodeSet::iterator iInit = initialImage.begin(); iInit != initialImage.end(); ++iInit )
 	    {
 		const typename  RefinementTree< IntervalT >::NodeT& cexNode = counterexample[ i ];
-		auto refinedImg = rtree.image( *iInit, cexNode );
+		// rather use leaf method
+		auto refinedImg = rtree.image( rtree.nodeValue( *iInit ).getEnclosure(), cexNode );
 		initialImage.insert( refinedImg.begin(), refinedImg.end() );
 	    }
 	    
