@@ -168,12 +168,13 @@ bool RefinementTreeTest::ImageTest::check() const
     std::vector< typename ExactRefinementTree::NodeT > imageSmallerBox = mpRtree->image( smallerBox );
     for( typename ExactRefinementTree::NodeT leaf : mpRtree->leaves( tree::root( mpRtree->tree() ) ) )
     {
-	const typename ExactRefinementTree::EnclosureT& leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure();
+	const typename ExactRefinementTree::EnclosureT& leafBox = mpRtree->nodeValue( leaf ).getEnclosure();
 	if( smallerBox.intersects( leafBox ) )
 	{
 	    typename std::vector< typename ExactRefinementTree::NodeT >::iterator iImg;
 	    iImg = std::find_if( imageSmallerBox.begin(), imageSmallerBox.end()
-				 , [&leaf, this] (const typename ExactRefinementTree::NodeT& n) { return nodeEquals( *mpRtree, leaf, n ); } );
+				 , [&leaf, this] (const typename ExactRefinementTree::NodeT& n) {
+				     return mpRtree->nodeValue( leaf ) == mpRtree->nodeValue( n ); } );
 	    // no equivalent box found in image
 	    if( iImg == imageSmallerBox.end() )
 	    {
@@ -215,9 +216,9 @@ bool RefinementTreeTest::NonLeafRemovalTest::check() const
 	    typename ExactRefinementTree::MappingT::VIterT ivfound = graph::findVertex( mpRtree->leafMapping(), nex );
 	    if( ivfound != vertices( mpRtree->leafMapping() ).second )
 	    {
-		D( std::cout << "box " << tree::value( mpRtree->tree(), nex ).getEnclosure()
+		D( std::cout << "box " << tree::value( mpRtree->tree(), nex )->getEnclosure()
 		   << " is not a leaf but found in graph as "
-		   << tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), *ivfound ) ).getEnclosure() << std::endl; );
+		   << mpRtree->nodeValue( *ivfound ).getEnclosure() << std::endl; );
 		return false;
 	    }
 	}
@@ -268,10 +269,11 @@ bool RefinementTreeTest::PreimageTest::check() const
 	
 	for( typename ExactRefinementTree::NodeT& leaf : allLeaves )
 	{
-	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure()
-		, refinementBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), refinement ) ).getEnclosure();
+	    Ariadne::ExactBoxType leafBox = mpRtree->nodeValue( leaf ).getEnclosure()
+		, refinementBox = mpRtree->nodeValue( refinement ).getEnclosure();
 	    auto iFound = std::find_if( preimg.begin(), preimg.end()
-					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) { return nodeEquals( *mpRtree, leaf, pn ); } );
+					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) {
+					    return mpRtree->nodeValue( leaf ) == mpRtree->nodeValue( pn ); } );
 	    bool isReach = possibly( mpRtree->isReachable( leaf, refinement ) );
 	    // false negative
 	    if( isReach && iFound == preimg.end() )
@@ -328,21 +330,22 @@ bool RefinementTreeTest::PostimageTest::check() const
 	
 	for( typename ExactRefinementTree::NodeT& leaf : allLeaves )
 	{
-	    Ariadne::ExactBoxType leafBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), leaf ) ).getEnclosure()
-		, refinementBox = tree::value( mpRtree->tree(), graph::value( mpRtree->leafMapping(), refinement ) ).getEnclosure();
+	    Ariadne::ExactBoxType leafBox = mpRtree->nodeValue( leaf ).getEnclosure()
+		, refinementBox = mpRtree->nodeValue( refinement ).getEnclosure();
 	    auto iFound = std::find_if( postimg.begin(), postimg.end()
-					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) { return nodeEquals( *mpRtree, leaf, pn ); } );
+					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) { 
+					    return mpRtree->nodeValue( pn ) == mpRtree->nodeValue( leaf ); } );
 	    bool isReach = possibly( mpRtree->isReachable( refinement, leaf ) );
 	    // false negative
 	    if( isReach && iFound == postimg.end() )
 	    {
-		D( std::cout << "failed! " << leafBox << " maps into " << refinementBox << " but is not contained in postimage" << std::endl; );
+		D( std::cout << "failed! " << refinementBox << " maps into " << leafBox << " but is not contained in postimage" << std::endl; );
 		return false;
 	    }
 	    // false positive
 	    if( !isReach && iFound != postimg.end() )
 	    {
-		D( std::cout << "failed! " << leafBox << " does not map into " << refinementBox << " but is contained in postimage" << std::endl; );
+		D( std::cout << "failed! " << refinementBox << " does not map into " << leafBox << " but is contained in postimage" << std::endl; );
 		return false;
 	    }
 	}
@@ -392,7 +395,7 @@ bool RefinementTreeTest::PositiveCounterexampleTest::check() const
     auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );
 
     std::cout << "is counterexample spurious? "
-	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), effort )
+	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), initImage.begin(), initImage.end(), effort )
 	      << std::endl;
 
     if( cexPath.empty() )

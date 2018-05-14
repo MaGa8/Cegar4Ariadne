@@ -15,53 +15,51 @@
 #include <functional>
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 template< typename I >
 class RefinementTree
 {
   public:
-
+    class InteriorTreeValue;
+    
     typedef I IntervalT;
     typedef Ariadne::Box< IntervalT > EnclosureT;
+    // use shared_ptr because data structures require copy constructibility
+    typedef tree::LinkedFixedBranchTree< std::shared_ptr< InteriorTreeValue >, 2 > RefinementT; 
+    typedef graph::AdjacencyDiGraph< typename RefinementT::NodeT, graph::VecMap, graph::InVec, graph::InVec > MappingT;
+    typedef typename MappingT::VertexT NodeT;
 
-    //! \class value to store in refinement tree holding a box and safety variable
-    class TreeValue
+    //! \class value to store in refinement tree
+    class InteriorTreeValue
     {
       public:
-	TreeValue()
+	InteriorTreeValue()
 	    : mEnclosure( Ariadne::Box< IntervalT >::zero( 0 ) )
-	    , mSafe( false )
 	    , mId( -1 )                     // should give some weird value that's easy to spot
+	    , mSafe( false )
 	{}
 	
-	TreeValue( const unsigned long& id, const EnclosureT& e, Ariadne::ValidatedLowerKleenean safe )
+	InteriorTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedLowerKleenean& safe )
 	    : mId( id )
 	    , mEnclosure( e )
 	    , mSafe( safe )
-
 	{}
 
-	TreeValue( const TreeValue& orig )
-	    : mId( orig.mId )
-	    , mEnclosure( orig.mEnclosure )
-	    , mSafe( orig.mSafe )
-	{}
+	InteriorTreeValue( const InteriorTreeValue& orig ) = default;
 
-	TreeValue& operator =( const TreeValue& orig )
-	{
-	    this->mId = orig.mId;
-	    this->mEnclosure = orig.mEnclosure;
-	    this->mSafe = orig.mSafe;
-	    return *this;
-	}
+	InteriorTreeValue& operator =( const InteriorTreeValue& orig ) = default;
 
+	//! \return unique identifier of this value
 	const unsigned long& id() const { return mId; }
 
+	//! \return box stored
 	const EnclosureT& getEnclosure() const { return mEnclosure; }
 
+	//! \return true if the box stored is completely covered by all constraints, indeterminate if it lies within the initial abstraction but is not covered completely by all constraints and false if it lies outside of the initial abstraction
 	Ariadne::ValidatedLowerKleenean isSafe() const { return mSafe; }
 
-	bool operator ==( const TreeValue& tv )
+	bool operator ==( const InteriorTreeValue& tv ) const
 	{
 	    return this->mId == tv.mId;
 	}
@@ -71,10 +69,27 @@ class RefinementTree
 	EnclosureT mEnclosure;
 	Ariadne::ValidatedLowerKleenean mSafe;
     };
-    
-    typedef tree::LinkedFixedBranchTree< TreeValue, 2 > RefinementT;
-    typedef graph::AdjacencyDiGraph< typename RefinementT::NodeT, graph::VecMap, graph::InVec, graph::InVec > MappingT;
-    typedef typename MappingT::VertexT NodeT;
+
+    //! \class value to store in leaves of refinement tree, does map to graph
+    class LeafTreeValue : public InteriorTreeValue
+    {
+      public:
+	LeafTreeValue() {}
+
+	LeafTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedLowerKleenean& safe )
+	    : InteriorTreeValue( id, e, safe )
+	{}
+
+	LeafTreeValue( const LeafTreeValue& orig ) = default;
+
+	LeafTreeValue& operator =( const LeafTreeValue& orig ) = default;
+
+	const typename MappingT::VertexT& graphNode() const { return mGraphNode; }
+	
+	void setGraphNode( const typename MappingT::VertexT& v ) { mGraphNode = v; }
+      private:
+	typename MappingT::VertexT mGraphNode;
+    };
 
     //! \return box containing the entire state space representable by doubles
     static Ariadne::Box< IntervalT > universeBox( size_t dimension )
@@ -115,14 +130,14 @@ class RefinementTree
 		    )
 	: mConstraints( constraints )
 	, mDynamics( dynamics )
-	, mRefinements( TreeValue( 0, initial, constraints.covers( initial ).check( effort )
-				   
-				   //				   , universeBox( initial.dimension() )
-				   //, constraints.covers( universeBox( initial.dimension() ) ).check( effort )
-				   ) )
+	, mRefinements( typename RefinementT::ValueT( new LeafTreeValue( 0, initial, constraints.covers( initial ).check( effort ) )
+						      //				   , universeBox( initial.dimension() )
+						      //, constraints.covers( universeBox( initial.dimension() ) ).check( effort )
+						      ) )
 	, mEffort( effort )
     {
-	NodeT initialNode = *addVertex( mMappings, root( mRefinements ) );
+	typename RefinementT::NodeT rt = root( mRefinements );
+	NodeT initialNode = addToGraph( rt );
 	if( possibly( isReachable( initialNode, initialNode ) ) )
 	    addEdge( mMappings, initialNode, initialNode );
     }
@@ -151,17 +166,9 @@ class RefinementTree
     }
 
     //! \return tree value stored at node v, storing the box and safety
-    const TreeValue& nodeValue( const NodeT& v ) const
+    const InteriorTreeValue& nodeValue( const NodeT& v ) const
     {
-	return tree::value( mRefinements, graph::value( mMappings, v ) );
-    }
-
-    //! \return true if n1 and n2 are equivalent, false otherwise
-    Ariadne::ValidatedLowerKleenean nodesEqual( const NodeT& n1, const NodeT& n2 ) const
-    {
-	Ariadne::LowerKleenean areEqual = tree::value( mRefinements, graph::value( mMappings, n1 ) ).getEnclosure() ==
-	    tree::value( mRefinements, graph::value( mMappings, n2 ) ).getEnclosure();
-	return areEqual.check( mEffort );
+	return *tree::value( mRefinements, graph::value( mMappings, v ) );
     }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
@@ -193,25 +200,20 @@ class RefinementTree
     {
     	// vector because there can't be duplicates
     	std::vector< NodeT > parts;
-    	const EnclosureT& boxTo = tree::value( mRefinements, to ).getEnclosure();
-
+	const InteriorTreeValue& tv = *tree::value( mRefinements, to );
+    	const EnclosureT& boxTo = tv.getEnclosure();
     	auto inter = Ariadne::intersection( from, boxTo );
-
 	// result is either Boolean for ExactInterval or LowerKleenean otherwise -> convert implicitly to latter if necessary
-
-	//! \todo would like to use LowerKleenean only
+	//! \todo would like to use LowerKleenean only and check with specific effort
 	Ariadne::ValidatedLowerKleenean isEmpty = inter.is_empty();
-
 
 	// if there's no chance that to and from intersect: return empty
 	if( definitely( isEmpty/*.check( mEffort )*/ ) )
     	    return parts;
     	else if( tree::isLeaf( mRefinements, to ) )
     	{
-    	    typename MappingT::VIterT iGraphNode = graph::findVertex( mMappings, to );
-    	    if( iGraphNode == vertices( mMappings ).second )
-    		throw std::logic_error( "no graph node could be found for a tree node" );
-    	    parts.push_back( *iGraphNode );
+	    // for debugging, later use static_cast
+	    parts.push_back( static_cast< const LeafTreeValue& >( tv ).graphNode() );
     	}
     	else
     	{
@@ -239,21 +241,19 @@ class RefinementTree
     }
     
     //! \return all leaves in subtree at subRoot
-    std::vector< NodeT > leaves( const typename RefinementT::NodeT& treev ) const
+    std::vector< NodeT > leaves( const typename RefinementT::NodeT& tn ) const
     {
     	std::vector< NodeT > ls;
+	const InteriorTreeValue& tv = *tree::value( mRefinements, tn );
 	
-    	if( tree::isLeaf( mRefinements, treev ) )
+    	if( tree::isLeaf( mRefinements, tn ) )
     	{
-    	    typename MappingT::VIterT iv = graph::findVertex( mMappings, treev );
-    	    if( iv == vertices( mMappings ).second )
-    		throw std::logic_error( "no matching graph vertex found for tree vertex" );
-    	    else
-    		ls.push_back( *iv );
+	    //! \todo use static_cast later
+	    ls.push_back( static_cast< const LeafTreeValue& >( tv ).graphNode() );
     	}
     	else
     	{
-    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, treev );
+    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, tn );
     	    for( ; cs.first != cs.second; ++cs.first )
     	    {
     		std::vector< NodeT > rls = leaves( *cs.first );
@@ -289,12 +289,13 @@ class RefinementTree
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
     Ariadne::ValidatedUpperKleenean isReachable( const NodeT& src, const NodeT& trg ) const
     {
-	const EnclosureT& srcBox = tree::value( mRefinements, graph::value( mMappings, src ) ).getEnclosure()
-	    , trgBox = tree::value( mRefinements, graph::value( mMappings, trg ) ).getEnclosure();
+	const EnclosureT& srcBox = nodeValue( src ).getEnclosure()
+	    , trgBox = nodeValue( trg ).getEnclosure();
 
 	Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
 	auto mapIntersection = Ariadne::intersection( ubMapped, trgBox );
 	Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
+
 	return doesInter;
     }
 
@@ -305,87 +306,97 @@ class RefinementTree
     void refine( NodeT& v, const IRefinementStrategy< IntervalT >& r )
     {
     	typename RefinementT::NodeT treev = graph::value( mMappings, v );
-    	// handle case: if v is not a leaf
+    	//! \todo handle case: if v is not a leaf
 	
     	// if v is leaf:
     	// obtain refinements of node v as list of appropriate length
-    	EnclosureT obox = tree::value( mRefinements, treev ).getEnclosure();
-
+    	EnclosureT obox = tree::value( mRefinements, treev )->getEnclosure();
+	// make new tree values
     	std::vector< EnclosureT > refined = r.refine( obox );
-    	// std::vector< TreeValue > tvals;
-    	std::array< TreeValue, RefinementT::N > tvals;
-
+    	std::array< std::shared_ptr< InteriorTreeValue >, RefinementT::N > tvals;
 	for( uint i = 0; i < refined.size(); ++i )
 	{
 	    const EnclosureT& refd = refined[ i ];
-	    tvals[ i ] = TreeValue( tree().size() + i, refined[ i ], constraints().covers( refined[ i ] ).check( mEffort ) );
+	    tvals[ i ] = typename RefinementT::ValueT( new LeafTreeValue( tree().size() + i
+									  , refined[ i ]
+									  , constraints().covers( refined[ i ] ).check( mEffort ) ) );
 	}
-	
-	// std::transform( refined.begin(), refined.end(), tvals.begin()
-    	// 		, [this] (const EnclosureT& e) { return TreeValue( e, mConstraints.covers( e ).check( mEffort ) ); } );
-
 	tree::expand( mRefinements, treev, tvals );
+
     	// add expansions to the graph
     	std::pair< typename RefinementT::CIterT, typename RefinementT::CIterT > cs = tree::children( mRefinements, treev );
     	std::vector< NodeT > refinedNodes;
     	for( ; cs.first != cs.second; ++cs.first )
-    	{
-	    typename MappingT::VIterT ivadd = graph::addVertex( mMappings, *cs.first );
-    	    refinedNodes.push_back( *ivadd );
-    	}
+	{
+	    typename RefinementT::NodeT refd = *cs.first;
+	    refinedNodes.push_back( addToGraph( refd ) );
+	}
 	
-    	// add edges
-	// NO! NONE OF THIS WORKS! EDGES MAY APPEAR "OUT OF NOTHING" DUE TO THE WAY BOXES ARE SAID TO MAP INTO EACH OTHER! --->
-	// misunderstanding...
-	std::vector< NodeT > pres( preimage( v ) );
-	std::vector< NodeT > posts( postimage( v ) );
-	// append all children of refined node, because center mapping refinements may introduce new links absent at parent level
-	// simply adding v is fine, because pres and posts will be traced down to leaf
-	pres.push_back( v );
-	posts.push_back( v );
+    	// // add edges
+	// std::vector< NodeT > pres( preimage( v ) );
+	// std::vector< NodeT > posts( postimage( v ) );
+	// // append all children of refined node, because center mapping refinements may introduce new links absent at parent level
+	// // simply adding v is fine, because pres and posts will be traced down to leaf
+	// pres.push_back( v );
+	// posts.push_back( v );
 
-    	for( NodeT& refined : refinedNodes )
-    	{
-    	    // determine which elements of the preimage of v map to which refined component
-    	    for( NodeT& pre : pres )
-    	    {
-    		for( NodeT& preLeaf : leaves( pre ) )
-    		{
-    		    if( possibly( isReachable( preLeaf, refined ) ) )
-			graph::addEdge( mMappings, preLeaf, refined );
-    		}
-    	    }
-    	    // determine which elements of the postimage the components of v map to
-    	    for( NodeT& post : posts )
-    	    {
-    		for( NodeT& postLeaf : leaves( post ) )
-    		{
-		    if( possibly( isReachable( refined, postLeaf ) ) )
-			graph::addEdge( mMappings, refined, postLeaf );
-    		}
-    	    }
-    	}
+    	// for( NodeT& refined : refinedNodes )
+    	// {
+    	//     // determine which elements of the preimage of v map to which refined component
+    	//     for( NodeT& pre : pres )
+    	//     {
+    	// 	for( NodeT& preLeaf : leaves( pre ) )
+    	// 	{
+    	// 	    if( possibly( isReachable( preLeaf, refined ) ) )
+	// 		graph::addEdge( mMappings, preLeaf, refined );
+    	// 	}
+    	//     }
+    	//     // determine which elements of the postimage the components of v map to
+    	//     for( NodeT& post : posts )
+    	//     {
+    	// 	for( NodeT& postLeaf : leaves( post ) )
+    	// 	{
+	// 	    if( possibly( isReachable( refined, postLeaf ) ) )
+	// 		graph::addEdge( mMappings, refined, postLeaf );
+    	// 	}
+    	//     }
+    	// }
 
 	// <--- inefficient alternative below
 	// to bring this back to life: map whole box and test image as intersection
 
-	// auto lvs = leaves( tree::root( mRefinements ) );
-	// for( NodeT& refined : refinedNodes )
-	// {
-	//     for( NodeT& lf : lvs )
-	//     {
-	// 	if( possibly( isReachable( lf, refined ) ) )
-	// 	    graph::addEdge( mMappings, lf, refined );
-	// 	if( possibly( isReachable( refined, lf ) ) )
-	// 	    graph::addEdge( mMappings, refined, lf );
-	//     }
-	// }
+	auto lvs = leaves( tree::root( mRefinements ) );
+	for( NodeT& refined : refinedNodes )
+	{
+	    for( NodeT& lf : lvs )
+	    {
+		if( possibly( isReachable( lf, refined ) ) )
+		    graph::addEdge( mMappings, lf, refined );
+		if( possibly( isReachable( refined, lf ) ) )
+		    graph::addEdge( mMappings, refined, lf );
+	    }
+	}
 	
 	// unlink v from the graph
-	graph::removeVertex( mMappings, v );
+	removeFromGraph( v );
     }
 
   private:
+    //! \brief add vertex to graph and ensure that tn holds the vertex
+    typename MappingT::VertexT addToGraph( typename RefinementT::NodeT& tn )
+    {
+	const typename MappingT::VertexT& vadded = *mMappings.addVertex( tn );
+	static_cast< LeafTreeValue* >( tree::value( mRefinements, tn ).get() )->setGraphNode( vadded );
+	return vadded;
+    }
+
+    //! \brief removes v from the graph and transforms the tree node stored into an interior node
+    void removeFromGraph( NodeT& n )
+    {
+	tree::value( mRefinements, graph::value( mMappings, n ) ).reset( new InteriorTreeValue( nodeValue( n ) ) ); // copy & slice
+	graph::removeVertex( mMappings, n );
+    }
+    
     Ariadne::ConstraintSet mConstraints;
     Ariadne::EffectiveVectorFunction mDynamics;
     Ariadne::Effort mEffort;
@@ -401,7 +412,7 @@ class RefinementTree
   any path terminates in
   1) loop leading back to state along path
   2) state with violated safety conditions
-  \param initialBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to box
+  \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< IntervalT >::NodeT
   \return vector of nodes terminated by a possibly unsafe node
   \todo add parameter to control ordering of branches in dfs exploration 
   \todo speed up: use references in vector storing path passed to recursive calls -> don't need to copy nodes
@@ -430,7 +441,8 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	// look for loop										       
 	typename std::vector< typename RefinementTree< IntervalT >::NodeT >::const_iterator iBeginLoop =
 	    std::find_if( path.begin(), path.end()
-			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {return definitely( rtree.nodesEqual( *iImgBegin, n ) ); } );
+			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {
+			      return rtree.nodeValue( n ) == rtree.nodeValue( *iImgBegin ); } );
 	// no loop found
 	if( iBeginLoop == path.end() )
 	{
@@ -471,9 +483,10 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 	return false;
     // center is not contained in initial image
     if( std::none_of( beginImage, endImage,
-		      [&rtree, &beginCounter, &effort] (const typename Rtree::EnclosureT& imgEnc)
+		      [&rtree, &beginCounter, &effort] ( const typename Rtree::NodeT& imgNode )
 		      {
-			  const typename Rtree::EnclosureT& startCexEnc = rtree.nodeValue( *beginCounter ).getEnclosure();
+			  const typename Rtree::EnclosureT& startCexEnc = rtree.nodeValue( *beginCounter ).getEnclosure()
+			      , imgEnc = rtree.nodeValue( imgNode ).getEnclosure();
 			  Ariadne::Kleenean contained = possibly( imgEnc.contains( startCexEnc.centre() ) );
 			  return possibly( contained.check( effort ) );
 		      } ) )
@@ -538,9 +551,9 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
   \param maxNodes number of nodes in tree after which to stop iterations
   \return sequence of nodes that forms a trajectory starting from the initial set
  */
-template< typename IntervalT, typename InitialIterT >
+template< typename IntervalT >
 std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree< IntervalT >& rtree
-								  , InitialIterT initialBegin, InitialIterT initialEnd
+								  , typename RefinementTree< IntervalT >::EnclosureT initialSet
 								  , const Ariadne::Effort& effort
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
@@ -568,10 +581,8 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
     // or identifying and removing refined nodes is more efficient
     typedef std::set< typename RefinementTree< IntervalT >::NodeT, NodeComparator > NodeSet;
     NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
-
-    for( InitialIterT iInit = initialBegin; iInit != initialEnd; ++iInit )
     {
-	auto img = rtree.image( *iInit );
+	auto img = rtree.image( initialSet );
 	initialImage.insert( img.begin(), img.end() );
     }
     
@@ -599,7 +610,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	// Ariadne::Box< IntervalT > unsafeBox = 
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
-							      , initialBegin, initialEnd
+							      , initialImage.begin(), initialImage.end()
 							      , effort ) )
 	    , definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
 	if( definitelyNotSpurious && definitelyUnsafe )
@@ -618,7 +629,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
 	    rtree.refine( counterexample[ i ], refinementStrat );
 	    // iterate over components of initial set and add their images starting from refined node for best performance
-	    for( InitialIterT iInit = initialBegin; iInit != initialEnd; ++iInit )
+	    for( typename NodeSet::iterator iInit = initialImage.begin(); iInit != initialImage.end(); ++iInit )
 	    {
 		const typename  RefinementTree< IntervalT >::NodeT& cexNode = counterexample[ i ];
 		auto refinedImg = rtree.image( *iInit, cexNode );

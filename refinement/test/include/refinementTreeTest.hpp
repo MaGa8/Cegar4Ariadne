@@ -24,6 +24,21 @@ struct RefinementTreeTest : public ITestGroup
     static std::default_random_engine mRandom;
 
     template< typename IntervalT >
+    class GraphVertexPrintConverter
+    {
+      public:
+	GraphVertexPrintConverter( const RefinementTree< IntervalT >& rtree ) : mRtree( rtree ) {}
+	
+	Ariadne::Box< IntervalT > operator ()( const typename RefinementTree< IntervalT >::MappingT::ValueT& val )
+	{
+	    return tree::value( mRtree.tree(), val )->getEnclosure();
+	}
+	
+      private:
+	const RefinementTree< IntervalT >& mRtree;
+    };
+
+    template< typename IntervalT >
     static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const Ariadne::Box< IntervalT >& rootBox, const IRefinementStrategy< IntervalT >& refiner )
     {
 	auto ls = rt.image( rootBox ); // should select all leaves, right?
@@ -48,9 +63,7 @@ struct RefinementTreeTest : public ITestGroup
     template< typename IntervalT >
     static bool nodeEquals( const RefinementTree< IntervalT >& rt, const typename RefinementTree< IntervalT >::NodeT& n1, const typename RefinementTree< IntervalT >::NodeT& n2 )
     {
-	return tree::value( rt.tree()
-			    , graph::value( rt.leafMapping(), n1 ) ).getEnclosure() == tree::value( rt.tree()
-													, graph::value( rt.leafMapping(), n2 ) ).getEnclosure();
+	return rt.nodeValue( n1 ) == rt.nodeValue( n2 );
     }
 
     template< typename IntervalT >
