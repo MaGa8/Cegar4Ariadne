@@ -381,7 +381,7 @@ void RefinementTreeTest::AlwaysUnsafeTest::init()
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
-    Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
+    Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x + 1, y + 1} );
     mpRtree.reset( new ExactRefinementTree( rtAbs, cs, f, Ariadne::Effort( 5 ) ) );
 }
 
@@ -393,31 +393,32 @@ void RefinementTreeTest::AlwaysUnsafeTest::iterate()
 // some leaf node exists that maps to always unsafe, because the system is static and unsafe by construction
 bool RefinementTreeTest::AlwaysUnsafeTest::check() const
 {
+    std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > gvalCon = GraphVertexPrintConverter( *mpRtree );
     auto unsafePreimg = mpRtree->preimage( mpRtree->alwaysUnsafe() );
+
     if( unsafePreimg.empty() )
     {
 	D( std::cout << "failure! always unsafe is not being mapped to" << std::endl; );
+	D( graph::print( std::cout, mpRtree->leafMapping(), gvalCon ); );
+
 	return false;
     }
     
     for( typename ExactRefinementTree::NodeT& n : mpRtree->leaves() )
     {
-	bool unsafe = definitely( !mpRtree->isSafe( n ) )
-	    , mapsToUnsafe = possibly( mpRtree->isReachable( mpRtree->nodeValue( n ).value().get(), mpRtree->alwaysUnsafe() ) )
+	bool  mapsToUnsafe = possibly( mpRtree->isReachable( mpRtree->nodeValue( n ).value().get(), mpRtree->alwaysUnsafe() ) )
 	    , inUnsafePreimg = std::any_of( unsafePreimg.begin(), unsafePreimg.end()
 					    , [this, &n] (const typename ExactRefinementTree::NodeT& pn) {
 						return mpRtree->nodeValue( pn ).value().get() == mpRtree->nodeValue( n ).value().get(); } );
-	std::array< bool, 3 > conds = { unsafe, mapsToUnsafe, inUnsafePreimg };
-	if( !std::all_of( conds.begin(), conds.end(), [] (const bool b) { return b; } )
-	    && !std::all_of( conds.begin(), conds.end(), [] (const bool b) { return !b; } ) )
+	if( mapsToUnsafe != inUnsafePreimg )
 	{
 	    D( std::cout << "node "; );
 	    D( printNodeValue< ExactRefinementTree >( mpRtree->nodeValue( n ) ); );
-	    D( std::cout << " is unsafe " << unsafe << ", maps to unsafe " << mapsToUnsafe << ", contained in unsafe preimage " << inUnsafePreimg << std::endl; );
+	    D( std::cout << ", maps to unsafe " << mapsToUnsafe << ", contained in unsafe preimage " << inUnsafePreimg << std::endl; );
 	    return false;
 	}
-	
     }
+    return true;
 }
 
 RefinementTreeTest::TEST_CTOR( PositiveCounterexampleTest, "test whether counterexample can be found" );

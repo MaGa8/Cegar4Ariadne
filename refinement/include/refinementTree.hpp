@@ -181,6 +181,7 @@ class RefinementTree
 	if( iAddedUnsafe == graph::vertices( mMappings ).second )
 	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
 	mUnsafeNode = *iAddedUnsafe;
+	
 	// set up root
 	typename RefinementT::NodeT rt = root( mRefinements );
 	NodeT initialNode = addToGraph( rt );
@@ -368,6 +369,7 @@ class RefinementTree
     }
 
     //! \return true if trg is deemed reachable from srcVal
+    //! \note if always unsafe node is passed as second argument, it is reachable iff srcVal maps outside the initial abstraction
     // \todo eventually parametrize this
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue& srcVal, const NodeT& trg ) const
@@ -384,9 +386,8 @@ class RefinementTree
 	else
 	{
 	    const EnclosureT& initialRefEnc = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
-	    Ariadne::LowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, srcBox ) == srcBox;
-	    return !intersectionEqual.check( mEffort );
-	    // wrong! want to know where srcVal maps to! return !srcVal.isSafe();
+	    Ariadne::ValidatedLowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, ubMapped ) == srcBox;
+	    return !intersectionEqual;
 	}
     }
 
@@ -452,12 +453,17 @@ class RefinementTree
 			graph::addEdge( mMappings, preLeaf, refined );
     		}
     	    }
+
     	    // determine which elements of the postimage the components of v map to
+	    const InteriorTreeValue& refinedVal = nodeValue( refined ).value(); // refined node is also in tree
     	    for( NodeT& post : posts )
     	    {
+		// outside value has no leaves
+		if( !graph::value( mMappings, post )->isInside() && possibly( isReachable( refinedVal, post ) ) )
+		    graph::addEdge( mMappings, refined, post );
+		
     		for( NodeT& postLeaf : leaves( post ) )
     		{
-		    const InteriorTreeValue& refinedVal = nodeValue( refined ).value(); // refined node is also in tree
 		    if( possibly( isReachable( refinedVal, postLeaf ) ) )
 			graph::addEdge( mMappings, refined, postLeaf );
     		}
@@ -542,6 +548,8 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 
 	// counterexample found
 	// image should never contain always-unsafe-node
+	
+	// \todo got optional access error here, fix
 	if( !definitely( rtree.nodeValue( *iImgBegin ).value().get().isSafe() ) )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
