@@ -48,7 +48,7 @@ void RefinementTreeTest::ExpansionTest::iterate()
 {
     D( std::cout << "expansion test iterate " << std::endl; );
     // find leaf randomly
-    std::vector< typename ExactRefinementTree::NodeT > ls = mpRtree->image( *mpBox ); // should select all leaves
+    std::vector< typename ExactRefinementTree::NodeT > ls = mpRtree->leaves(); // should select all leaves
 
     std::uniform_int_distribution<> pickDist( 0, ls.size() - 1 );
     typename std::vector< typename ExactRefinementTree::NodeT >::iterator iexp = ls.begin() + pickDist( mRandom );
@@ -120,7 +120,7 @@ void RefinementTreeTest::LeavesTest::iterate()
 bool RefinementTreeTest::LeavesTest::check() const
 {
     D( std::cout << "leaves test check" << std::endl; );
-    std::vector< typename ExactRefinementTree::NodeT > ls = mpRtree->image( *mpBox );
+    std::vector< typename ExactRefinementTree::NodeT > ls = mpRtree->leaves();
     if( ls.size() != 1 + (EXPANSION_SIZE - 1) * mExpansionCounter )
     {
 	D( std::cout << "bad number of nodes " << ls.size() << " after " << mExpansionCounter << " expansions" << std::endl; );
@@ -177,7 +177,10 @@ bool RefinementTreeTest::ImageTest::check() const
 	    typename std::vector< typename ExactRefinementTree::NodeT >::iterator iImg;
 	    iImg = std::find_if( imageSmallerBox.begin(), imageSmallerBox.end()
 				 , [&leaf, this] (const typename ExactRefinementTree::NodeT& n) {
-				     return mpRtree->nodeValue( leaf ).value().get() == mpRtree->nodeValue( n ).value().get(); } );
+				     std::optional< std::reference_wrapper< const typename ExactRefinementTree::InteriorTreeValue > > oN = mpRtree->nodeValue( n );
+				     if( !oN )
+					 return false;
+				     return mpRtree->nodeValue( leaf ).value().get() == oN.value().get(); } );
 	    // no equivalent box found in image
 	    if( iImg == imageSmallerBox.end() )
 	    {

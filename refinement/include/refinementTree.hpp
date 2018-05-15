@@ -249,63 +249,35 @@ class RefinementTree
     const NodeT& alwaysUnsafe() const { return mUnsafeNode; }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
-    //! \return most refined boxes intersecting with from
+    //! \return most refined boxes intersecting with from, including always unsafe
     template< typename EnclosureT2 >
     std::vector< NodeT > image( const EnclosureT2& from ) const
     {
-	std::vector< NodeT > constImage = imageRecursive( from, root( mRefinements ) );
-	return constImage;
+	std::vector< NodeT > img = imageRecursive( from, root( mRefinements ) );
+	auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
+	if( iUnsafe != img.end() )
+	    img.push_back( alwaysUnsafe() );
+	return img;
     }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \param subtreeRoot require leaves to be rooted at this node
-    //! \return most refined boxes intersecting with from
-    template< typename EnclosureT2 >
-    std::vector< NodeT > image( const EnclosureT2& from, const NodeT& subtreeRoot )
-    {
-	const typename MappingT::ValueT& gval = graph::value( mMappings, subtreeRoot );
-	if( gval->isInside() )
-	    return imageRecursive( from, static_cast< const InsideGraphValue& >( *gval ).treeNode() );
-	else
-	    return {};
-    }
-
-    // helper function for recursive calls of image
-    // abstract same code as leaves in DFS controller
-    /*!
-      \param from enclosure whose image to find
-      \param to image boxes located in subtree rooted at to
-    */
-    template< typename EnclosureT2 >
-    std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to ) const
-    {
-    	// vector because there can't be duplicates
-    	std::vector< NodeT > parts;
-	const InteriorTreeValue& tv = *tree::value( mRefinements, to );
-    	const EnclosureT& boxTo = tv.getEnclosure();
-    	auto inter = Ariadne::intersection( from, boxTo );
-	// result is either Boolean for ExactInterval or LowerKleenean otherwise -> convert implicitly to latter if necessary
-	//! \todo would like to use LowerKleenean only and check with specific effort
-	Ariadne::ValidatedLowerKleenean isEmpty = inter.is_empty();
-
-	// if there's no chance that to and from intersect: return empty
-	if( definitely( isEmpty/*.check( mEffort )*/ ) )
-    	    return parts;
-    	else if( tree::isLeaf( mRefinements, to ) )
-    	{
-	    parts.push_back( static_cast< const LeafTreeValue& >( tv ).graphNode() );
-    	}
-    	else
-    	{
-    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, to );
-    	    for( ; cs.first != cs.second; ++cs.first )
-    	    {
-    		std::vector< NodeT > rns = imageRecursive( from, *cs.first );
-    		parts.insert( parts.end(), rns.begin(), rns.end() );
-    	    }
-    	}
-    	return parts;
-    }
+    //! \return most refined boxes intersecting with from, including always unsafe
+    // template< typename EnclosureT2 >
+    // std::vector< NodeT > image( const EnclosureT2& from, const NodeT& subtreeRoot )
+    // {
+    // 	const typename MappingT::ValueT& gval = graph::value( mMappings, subtreeRoot );
+    // 	if( gval->isInside() )
+    // 	{
+    // 	    std::vector< NodeT > img = imageRecursive( from, static_cast< const InsideGraphValue& >( *gval ).treeNode() );
+    // 	    auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
+    // 	    if( iUnsafe != img.end() )
+    // 		img.push_back( alwaysUnsafe() );
+    // 	    return img;
+    // 	}
+    // 	else
+    // 	    return { alwaysUnsafe(); };
+    // }
 
     // all node accessors: can be declared const, because tree or graph need to be accessed in order to change anything
     //! \return all leaves of the tree
@@ -490,6 +462,44 @@ class RefinementTree
     }
 
   private:
+
+    // helper function for recursive calls of image
+    // abstract same code as leaves in DFS controller
+    /*!
+      \param from enclosure whose image to find
+      \param to image boxes located in subtree rooted at to
+      \return all nodes intersecting with from, but EXCLUDING always unsafe
+    */
+    template< typename EnclosureT2 >
+    std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to ) const
+    {
+    	// vector because there can't be duplicates
+    	std::vector< NodeT > parts;
+	const InteriorTreeValue& tv = *tree::value( mRefinements, to );
+    	const EnclosureT& boxTo = tv.getEnclosure();
+    	auto inter = Ariadne::intersection( from, boxTo );
+	// result is either Boolean for ExactInterval or LowerKleenean otherwise -> convert implicitly to latter if necessary
+	//! \todo would like to use LowerKleenean only and check with specific effort
+	Ariadne::ValidatedLowerKleenean isEmpty = inter.is_empty();
+
+	// if there's no chance that to and from intersect: return empty
+	if( definitely( isEmpty/*.check( mEffort )*/ ) )
+    	    return parts;
+    	else if( tree::isLeaf( mRefinements, to ) )
+    	{
+	    parts.push_back( static_cast< const LeafTreeValue& >( tv ).graphNode() );
+    	}
+    	else
+    	{
+    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, to );
+    	    for( ; cs.first != cs.second; ++cs.first )
+    	    {
+    		std::vector< NodeT > rns = imageRecursive( from, *cs.first );
+    		parts.insert( parts.end(), rns.begin(), rns.end() );
+    	    }
+    	}
+    	return parts;
+    }
 
     //! \brief add interior vertex to graph and ensure that tn holds the vertex
     typename MappingT::VertexT addToGraph( typename RefinementT::NodeT& tn )
