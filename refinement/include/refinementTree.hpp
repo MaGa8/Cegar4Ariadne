@@ -249,35 +249,26 @@ class RefinementTree
     const NodeT& outside() const { return mOutsideNode; }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
-    //! \return most refined boxes intersecting with from, including always unsafe
+    //! \return most refined boxes intersecting with from, including outside node
     template< typename EnclosureT2 >
     std::vector< NodeT > image( const EnclosureT2& from ) const
     {
-	std::vector< NodeT > img = imageRecursive( from, root( mRefinements ) );
-	const EnclosureT& rtAbs = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
-	if( possibly( !(Ariadne::intersection( rtAbs, from ) == from) ) )
-	    img.push_back( outside() );
-	return img;
+	return image( from, root( mRefinements ) );
     }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \param subtreeRoot require leaves to be rooted at this node
-    //! \return most refined boxes intersecting with from, including always unsafe
-    // template< typename EnclosureT2 >
-    // std::vector< NodeT > image( const EnclosureT2& from, const NodeT& subtreeRoot )
-    // {
-    // 	const typename MappingT::ValueT& gval = graph::value( mMappings, subtreeRoot );
-    // 	if( gval->isInside() )
-    // 	{
-    // 	    std::vector< NodeT > img = imageRecursive( from, static_cast< const InsideGraphValue& >( *gval ).treeNode() );
-    // 	    auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
-    // 	    if( iUnsafe != img.end() )
-    // 		img.push_back( outside() );
-    // 	    return img;
-    // 	}
-    // 	else
-    // 	    return { outside(); };
-    // }
+    //! \return most refined boxes intersecting with from, including outside node
+    template< typename EnclosureT2 >
+    std::vector< NodeT > image( const EnclosureT2& from, const typename RefinementT::NodeT& subtreeRoot ) const
+    {
+	std::vector< NodeT > img = imageRecursive( from, subtreeRoot );
+	// code non functional as of now, requires tree value to store ValidatedKleenean as safety flag
+	auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
+	if( iUnsafe != img.end() )
+	    img.push_back( outside() );
+	return img;
+    }
 
     // all node accessors: can be declared const, because tree or graph need to be accessed in order to change anything
     //! \return all leaves of the tree
@@ -795,7 +786,6 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
 	    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oref = rtree.nodeValue( counterexample[ i ] );
-
 	    std::cout << "refining box ";
 	    if( oref )
 		std::cout << oref.value().get().getEnclosure();
@@ -807,9 +797,14 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    // iterate over components of initial set and add their images starting from refined node for best performance
 	    for( const typename Rtree::NodeT& initial : initialImage )
 	    {
-		std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > itvInitial = rtree.nodeValue( initial );
-		auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure(), counterexample[ i ] );
-		initialImage.insert( refinedImg.begin(), refinedImg.end() );
+		const typename Rtree::IGraphValue& gValCex = *graph::value( rtree.leafMapping(), counterexample[ i ] );
+		if( gValCex.isInside() )
+		{
+		    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > itvInitial = rtree.nodeValue( initial );
+		    auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure()
+						   , static_cast< const typename Rtree::InsideGraphValue& >( gValCex ).treeNode() );
+		    initialImage.insert( refinedImg.begin(), refinedImg.end() );
+		}
 	    }
 	    
 	    initialImage.erase( counterexample[ i ] );
