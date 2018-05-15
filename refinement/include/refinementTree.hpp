@@ -448,7 +448,7 @@ class RefinementTree
     	    {
     		for( NodeT& preLeaf : leaves( pre ) )
     		{
-		    const InteriorTreeValue& preVal = nodeValue( preLeaf ).value(); // obtained from tree, so should have value
+		    const InteriorTreeValue& preVal = nodeValue( preLeaf ).value(); // obtained as leaf, so should have value
     		    if( possibly( isReachable( preVal, refined ) ) )
 			graph::addEdge( mMappings, preLeaf, refined );
     		}
@@ -547,10 +547,9 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 		  // << " which is " << rtree.nodeValue( *iImgBegin ).isSafe() << " safe " << std::endl;
 
 	// counterexample found
-	// image should never contain always-unsafe-node
-	
-	// \todo got optional access error here, fix
-	if( !definitely( rtree.nodeValue( *iImgBegin ).value().get().isSafe() ) )
+	// image should never contain always-unsafe-node --> that assumption is wrong!
+	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oImg = rtree.nodeValue( *iImgBegin );
+	if( !oImg || !definitely( oImg.value().get().isSafe() ) )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
@@ -563,7 +562,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	    std::find_if( path.begin(), path.end()
 			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {
 			      std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > on = rtree.nodeValue( n );
-			      if( !on )          // image is always inside graph value
+			      if( !on )          // image is valid, otherwise would have returned 
 				  return false;
 			      return on.value().get() == rtree.nodeValue( *iImgBegin ).value().get(); } );
 	// no loop found
@@ -604,6 +603,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
     
     std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oBeginCex = rtree.nodeValue( *beginCounter );
     // always unsafe node is terminal state because it is unsafe
+    // need this check, because first node in counterexample might be always unsafe
     if( !oBeginCex )
 	return false;
     // one or less nodes in counterexample
@@ -613,9 +613,11 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
     if( std::none_of( beginImage, endImage,
 		      [&rtree, &oBeginCex, &effort] ( const typename Rtree::NodeT& imgNode )
 		      {
-			  const typename Rtree::EnclosureT& startCexEnc = oBeginCex.value().get().getEnclosure()
-			      , imgEnc = rtree.nodeValue( imgNode ).value().get().getEnclosure();
-			  Ariadne::Kleenean contained = possibly( imgEnc.contains( startCexEnc.centre() ) );
+			  const typename Rtree::EnclosureT& startCexEnc = oBeginCex.value().get().getEnclosure();
+			  std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oImg = rtree.nodeValue( imgNode );
+			  if( !oImg )
+			      return false;			  
+			  Ariadne::Kleenean contained = possibly( oImg.value().get().getEnclosure().contains( startCexEnc.centre() ) );
 			  return possibly( contained.check( effort ) );
 		      } ) )
 	return true;
@@ -773,6 +775,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    std::cout << "terminal node is not completely unsafe" << std::endl;
 
 	// want to refine last state as well
+	std::cout << "collecting image in refined tree" << std::endl;
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
 	    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oref = rtree.nodeValue( counterexample[ i ] );
@@ -795,8 +798,6 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    
 	    initialImage.erase( counterexample[ i ] );
 	}
-
-	std::cout << "collecting image in refined tree" << std::endl;
 
 	// \todo test against this code
 	// replaced by code in for loop over counterexs above
