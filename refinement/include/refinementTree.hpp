@@ -229,6 +229,21 @@ class RefinementTree
 	    return std::nullopt;
     }
 
+    //! \return true if n is certain to be safe, false if it is certain to be unsafe, indeterminate otherwise
+    Ariadne::ValidatedKleenean isSafe( const NodeT& n ) const
+    {
+	std::optional< std::reference_wrapper< const InteriorTreeValue > > on = nodeValue( n );
+	if( on )
+	{
+	    if( on.value().get().isSafe() == true )
+		return true;
+	    if( on.value().get().isSafe() == Ariadne::indeterminate )
+		return Ariadne::indeterminate;
+	}
+	else
+	    return false;
+    }
+
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from
     template< typename EnclosureT2 >
