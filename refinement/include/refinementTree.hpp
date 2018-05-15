@@ -180,7 +180,7 @@ class RefinementTree
 	auto iAddedUnsafe = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
 	if( iAddedUnsafe == graph::vertices( mMappings ).second )
 	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
-	mUnsafeNode = *iAddedUnsafe;
+	mOutsideNode = *iAddedUnsafe;
 	
 	// set up root
 	typename RefinementT::NodeT rt = root( mRefinements );
@@ -190,8 +190,8 @@ class RefinementTree
 	if( possibly( isReachable( otv, initialNode ) ) )
 	    addEdge( mMappings, initialNode, initialNode );
 	// transition to unsafe: only can transition to unsafe, not from it
-	if( possibly( isReachable( otv, mUnsafeNode ) ) )
-	    addEdge( mMappings, initialNode, mUnsafeNode );
+	if( possibly( isReachable( otv, mOutsideNode ) ) )
+	    addEdge( mMappings, initialNode, mOutsideNode );
     }
 
     //! \return constraints determining the safe set
@@ -246,7 +246,7 @@ class RefinementTree
     }
 
     //! \return the always unsafe node used
-    const NodeT& alwaysUnsafe() const { return mUnsafeNode; }
+    const NodeT& outside() const { return mOutsideNode; }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from, including always unsafe
@@ -254,9 +254,9 @@ class RefinementTree
     std::vector< NodeT > image( const EnclosureT2& from ) const
     {
 	std::vector< NodeT > img = imageRecursive( from, root( mRefinements ) );
-	auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
-	if( iUnsafe != img.end() )
-	    img.push_back( alwaysUnsafe() );
+	const EnclosureT& rtAbs = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
+	if( possibly( !(Ariadne::intersection( rtAbs, from ) == from) ) )
+	    img.push_back( outside() );
 	return img;
     }
 
@@ -272,11 +272,11 @@ class RefinementTree
     // 	    std::vector< NodeT > img = imageRecursive( from, static_cast< const InsideGraphValue& >( *gval ).treeNode() );
     // 	    auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
     // 	    if( iUnsafe != img.end() )
-    // 		img.push_back( alwaysUnsafe() );
+    // 		img.push_back( outside() );
     // 	    return img;
     // 	}
     // 	else
-    // 	    return { alwaysUnsafe(); };
+    // 	    return { outside(); };
     // }
 
     // all node accessors: can be declared const, because tree or graph need to be accessed in order to change anything
@@ -347,18 +347,24 @@ class RefinementTree
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue& srcVal, const NodeT& trg ) const
     {
 	const EnclosureT& srcBox = srcVal.getEnclosure();
-	Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
-	std::optional< std::reference_wrapper< const InteriorTreeValue > > trgBox = nodeValue( trg );
-	if( trgBox )
+	return isReachable( srcVal.getEnclosure(), trg );
+    }
+    
+    //! \return true if there exists some point in src s.t. there exists a point in trg that can be reached
+    Ariadne::ValidatedUpperKleenean isReachable( const EnclosureT& src, const NodeT& trg ) const
+    {
+	Ariadne::UpperBoxType ubMapped =  Ariadne::image( src, mDynamics );
+	std::optional< std::reference_wrapper< const InteriorTreeValue > > trgVal = nodeValue( trg );
+	if( trgVal )
 	{
-	    auto mapIntersection = Ariadne::intersection( ubMapped, trgBox.value().get().getEnclosure() );
+	    auto mapIntersection = Ariadne::intersection( src, trgVal.value().get().getEnclosure() );
 	    Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
 	    return doesInter;
 	}
 	else
 	{
 	    const EnclosureT& initialRefEnc = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
-	    Ariadne::ValidatedLowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, ubMapped ) == srcBox;
+	    Ariadne::ValidatedLowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, ubMapped ) == src;
 	    return !intersectionEqual;
 	}
     }
@@ -528,7 +534,7 @@ class RefinementTree
     Ariadne::Effort mEffort;
     RefinementT mRefinements;
     MappingT mMappings;
-    NodeT mUnsafeNode;
+    NodeT mOutsideNode;
 };
 
 /*!

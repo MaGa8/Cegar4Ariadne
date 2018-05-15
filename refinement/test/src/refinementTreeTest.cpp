@@ -397,7 +397,7 @@ void RefinementTreeTest::AlwaysUnsafeTest::iterate()
 bool RefinementTreeTest::AlwaysUnsafeTest::check() const
 {
     std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > gvalCon = GraphVertexPrintConverter( *mpRtree );
-    auto unsafePreimg = mpRtree->preimage( mpRtree->alwaysUnsafe() );
+    auto unsafePreimg = mpRtree->preimage( mpRtree->outside() );
 
     if( unsafePreimg.empty() )
     {
@@ -409,7 +409,7 @@ bool RefinementTreeTest::AlwaysUnsafeTest::check() const
     
     for( typename ExactRefinementTree::NodeT& n : mpRtree->leaves() )
     {
-	bool  mapsToUnsafe = possibly( mpRtree->isReachable( mpRtree->nodeValue( n ).value().get(), mpRtree->alwaysUnsafe() ) )
+	bool  mapsToUnsafe = possibly( mpRtree->isReachable( mpRtree->nodeValue( n ).value().get(), mpRtree->outside() ) )
 	    , inUnsafePreimg = std::any_of( unsafePreimg.begin(), unsafePreimg.end()
 					    , [this, &n] (const typename ExactRefinementTree::NodeT& pn) {
 						return mpRtree->nodeValue( pn ).value().get() == mpRtree->nodeValue( n ).value().get(); } );
