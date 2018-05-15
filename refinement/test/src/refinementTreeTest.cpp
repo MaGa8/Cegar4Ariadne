@@ -113,7 +113,7 @@ void RefinementTreeTest::LeavesTest::iterate()
 {
     D( std::cout << "leaves test iterate" << std::endl; );
     LargestSideRefiner< Ariadne::ExactIntervalType > refiner;
-    refineRandomLeaf( *mpRtree, *mpBox, refiner );
+    refineRandomLeaf( *mpRtree, refiner );
     ++mExpansionCounter;
 }
 
@@ -152,7 +152,7 @@ void RefinementTreeTest::ImageTest::init()
 void RefinementTreeTest::ImageTest::iterate()
 {
     LargestSideRefiner< typename ExactRefinementTree::IntervalT > refiner;
-    refineRandomLeaf( *mpRtree, *mpRootBox, refiner );
+    refineRandomLeaf( *mpRtree, refiner );
 }
 
 bool RefinementTreeTest::ImageTest::check() const
@@ -202,7 +202,7 @@ void RefinementTreeTest::NonLeafRemovalTest::init()
 void RefinementTreeTest::NonLeafRemovalTest::iterate()
 {
     D( std::cout << "non leaf removal test iterate" << std::endl; );
-    typename ExactRefinementTree::NodeT refined = refineRandomLeaf( *mpRtree, *mpRootBox, mRefiner );
+    typename ExactRefinementTree::NodeT refined = refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 bool RefinementTreeTest::NonLeafRemovalTest::check() const
@@ -259,7 +259,7 @@ void RefinementTreeTest::PreimageTest::init()
 void RefinementTreeTest::PreimageTest::iterate()
 {
     D( std::cout << "preimage test iterate" << std::endl; );
-    mRefined = refineRandomLeaf( *mpRtree, *mpRootBox, mRefiner );
+    mRefined = refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 // check for each child of refined node r':
@@ -323,7 +323,7 @@ void RefinementTreeTest::PostimageTest::init()
 void RefinementTreeTest::PostimageTest::iterate()
 {
     D( std::cout << "preimage test iterate" << std::endl; );
-    mRefined = refineRandomLeaf( *mpRtree, *mpRootBox, mRefiner );
+    mRefined = refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 // check for each child of refined node r':
@@ -363,6 +363,61 @@ bool RefinementTreeTest::PostimageTest::check() const
 	}
     }
     return true;
+}
+
+RefinementTreeTest::TEST_CTOR( AlwaysUnsafeTest, "always unsafe node is being mapped to in unsafe, static system" );
+
+void RefinementTreeTest::AlwaysUnsafeTest::init()
+{
+    D( std::cout << "always unsafe test init" << std::endl; );
+
+    typename ExactRefinementTree::EnclosureT rtAbs = Ariadne::ExactBoxType( { {0,10}, {0,10} } );
+    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+    Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
+    // only upper bound on + values
+    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 9 );
+    Ariadne::EffectiveConstraintSet cs = { c1 };
+    // static dynamics
+    Ariadne::RealVariable x( "x" ), y( "y" );
+    Ariadne::Space< Ariadne::Real > vspace = {x, y};
+    Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
+    mpRtree.reset( new ExactRefinementTree( rtAbs, cs, f, Ariadne::Effort( 5 ) ) );
+}
+
+void RefinementTreeTest::AlwaysUnsafeTest::iterate()
+{
+    refineRandomLeaf( *mpRtree, mRefiner );
+}
+
+// some leaf node exists that maps to always unsafe, because the system is static and unsafe by construction
+bool RefinementTreeTest::AlwaysUnsafeTest::check() const
+{
+    auto unsafePreimg = mpRtree->preimage( mpRtree->alwaysUnsafe() );
+    if( unsafePreimg.empty() )
+    {
+	D( std::cout << "failure! always unsafe is not being mapped to" << std::endl; );
+	return false;
+    }
+    
+    for( typename ExactRefinementTree::NodeT& n : mpRtree->leaves() )
+    {
+	bool unsafe = definitely( !mpRtree->isSafe( n ) )
+	    , mapsToUnsafe = possibly( mpRtree->isReachable( mpRtree->nodeValue( n ).value().get(), mpRtree->alwaysUnsafe() ) )
+	    , inUnsafePreimg = std::any_of( unsafePreimg.begin(), unsafePreimg.end()
+					    , [this, &n] (const typename ExactRefinementTree::NodeT& pn) {
+						return mpRtree->nodeValue( pn ).value().get() == mpRtree->nodeValue( n ).value().get(); } );
+	std::array< bool, 3 > conds = { unsafe, mapsToUnsafe, inUnsafePreimg };
+	if( !std::all_of( conds.begin(), conds.end(), [] (const bool b) { return b; } )
+	    && !std::all_of( conds.begin(), conds.end(), [] (const bool b) { return !b; } ) )
+	{
+	    D( std::cout << "node "; );
+	    D( printNodeValue< ExactRefinementTree >( mpRtree->nodeValue( n ) ); );
+	    D( std::cout << " is unsafe " << unsafe << ", maps to unsafe " << mapsToUnsafe << ", contained in unsafe preimage " << inUnsafePreimg << std::endl; );
+	    return false;
+	}
+	
+    }
 }
 
 RefinementTreeTest::TEST_CTOR( PositiveCounterexampleTest, "test whether counterexample can be found" );
@@ -426,10 +481,11 @@ void RefinementTreeTest::init()
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
     addTest( new ExpansionTest( mTestSize, mRepetitions ), pRinterleave );
-    // addTest( new LeavesTest( mTestSize, mRepetitions ), pRinterleave );
-    // addTest( new ImageTest( mTestSize, mRepetitions ), pRcontinuous );
-    // addTest( new NonLeafRemovalTest( mTestSize, mRepetitions ), pRcontinuous );
-    // addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
-    // addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
-    // addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
+    addTest( new LeavesTest( mTestSize, mRepetitions ), pRinterleave );
+    addTest( new ImageTest( mTestSize, mRepetitions ), pRcontinuous );
+    addTest( new NonLeafRemovalTest( mTestSize, mRepetitions ), pRcontinuous );
+    addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
+    addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
+    addTest( new AlwaysUnsafeTest( mTestSize, mRepetitions ), pRinterleave );
+    addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
 }

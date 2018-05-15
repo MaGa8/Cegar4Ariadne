@@ -235,14 +235,17 @@ class RefinementTree
 	std::optional< std::reference_wrapper< const InteriorTreeValue > > on = nodeValue( n );
 	if( on )
 	{
-	    if( on.value().get().isSafe() == true )
+	    if( definitely( on.value().get().isSafe() ) )
 		return true;
-	    if( on.value().get().isSafe() == Ariadne::indeterminate )
+	    else
 		return Ariadne::indeterminate;
 	}
 	else
 	    return false;
     }
+
+    //! \return the always unsafe node used
+    const NodeT& alwaysUnsafe() const { return mUnsafeNode; }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from

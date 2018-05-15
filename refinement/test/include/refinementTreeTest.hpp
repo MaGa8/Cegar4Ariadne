@@ -45,9 +45,9 @@ struct RefinementTreeTest : public ITestGroup
     };
 
     template< typename IntervalT >
-    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const Ariadne::Box< IntervalT >& rootBox, const IRefinementStrategy< IntervalT >& refiner )
+    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinementStrategy< IntervalT >& refiner )
     {
-	auto ls = rt.image( rootBox ); // should select all leaves, right?
+	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
 	typename RefinementTree< IntervalT >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
 	rt.refine( n, refiner );
@@ -156,6 +156,14 @@ struct RefinementTreeTest : public ITestGroup
     	typename ExactRefinementTree::NodeT mRefined;
     	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
     	STATEFUL_TEST( PostimageTest );
+    };
+    
+    // test that there exists a node in static unsafe system that maps to always unsafe
+    class AlwaysUnsafeTest : public ITest
+    {
+	std::unique_ptr< ExactRefinementTree > mpRtree;
+	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	STATEFUL_TEST( AlwaysUnsafeTest );
     };
 
     //positve test for finding counterexamples
