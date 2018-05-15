@@ -116,7 +116,7 @@ namespace graph
     // }
 
     template< typename G >
-    typename DiGraphTraits< G >::VIterT findVertex( const G& g, const typename DiGraphTraits< G >::ConstValueT& val );
+    typename DiGraphTraits< G >::VIterT findVertex( const G& g, const typename DiGraphTraits< G >::ValueT& val );
 
     // template< typename G >
     // typename DiGraphTraits< G >::ConstVIterT findVertex( const G& g, const typename DiGraphTraits< G >::ConstValueT& val )

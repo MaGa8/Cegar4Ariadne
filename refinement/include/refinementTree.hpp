@@ -22,12 +22,17 @@ class RefinementTree
 {
   public:
     class InteriorTreeValue;
+    struct IGraphValue;
+    class InsideGraphValue;
+    struct OutsideGraphValue;
     
     typedef I IntervalT;
     typedef Ariadne::Box< IntervalT > EnclosureT;
     // use shared_ptr because data structures require copy constructibility
-    typedef tree::LinkedFixedBranchTree< std::shared_ptr< InteriorTreeValue >, 2 > RefinementT; 
-    typedef graph::AdjacencyDiGraph< typename RefinementT::NodeT, graph::VecMap, graph::InVec, graph::InVec > MappingT;
+    // refinement tree: stores pointers to values that vary depending on whether they are stored in leafs or interior nodes
+    typedef tree::LinkedFixedBranchTree< std::shared_ptr< InteriorTreeValue >, 2 > RefinementT;
+    // mapping graph: stores pointers to values that are either an "always-unsafe-node" or regular node storing a tree node
+    typedef graph::AdjacencyDiGraph< std::shared_ptr< IGraphValue >, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
 
     //! \class value to store in refinement tree
@@ -63,6 +68,8 @@ class RefinementTree
 	{
 	    return this->mId == tv.mId;
 	}
+
+	virtual bool isLeaf() const { return false; }
 	
       private:
 	unsigned long mId;
@@ -86,6 +93,8 @@ class RefinementTree
 
 	const typename MappingT::VertexT& graphNode() const { return mGraphNode; }
 	
+	bool isLeaf() const { return true; }
+
 	void setGraphNode( const typename MappingT::VertexT& v ) { mGraphNode = v; }
       private:
 	typename MappingT::VertexT mGraphNode;
@@ -94,7 +103,7 @@ class RefinementTree
     //! \class abstract base class for value to store in graph
     struct IGraphValue
     {
-	constexpr bool isInside() const = 0;
+	virtual bool isInside() const = 0;
     };
 
     //! \class value to store in graph of region inside first initial abstraction
@@ -111,7 +120,7 @@ class RefinementTree
 
 	const typename RefinementT::NodeT& treeNode() const { return mTreeNode; }
 
-	constexpr bool isInside() const { return true; }
+	bool isInside() const { return true; }
       private:
 	typename RefinementT::NodeT mTreeNode;
     };
@@ -119,7 +128,7 @@ class RefinementTree
     //! \class value to store in graph of region outside first initial abstractio
     struct OutsideGraphValue : public IGraphValue
     {
-	constexpr bool isInside() const { return false; }
+	bool isInside() const { return false; }
     };
 
     //! \return box containing the entire state space representable by doubles
@@ -167,10 +176,14 @@ class RefinementTree
 						      ) )
 	, mEffort( effort )
     {
+	// set up root
 	typename RefinementT::NodeT rt = root( mRefinements );
 	NodeT initialNode = addToGraph( rt );
-	if( possibly( isReachable( initialNode, initialNode ) ) )
+	const InteriorTreeValue& otv = nodeValue( initialNode ).value(); // should never fail
+	if( possibly( isReachable( otv, initialNode ) ) )
 	    addEdge( mMappings, initialNode, initialNode );
+	// add always unsafe node
+	graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
     }
 
     //! \return constraints determining the safe set
@@ -197,9 +210,16 @@ class RefinementTree
     }
 
     //! \return tree value stored at node v, storing the box and safety
-    const InteriorTreeValue& nodeValue( const NodeT& v ) const
+    std::optional< std::reference_wrapper< const InteriorTreeValue > > nodeValue( const NodeT& v ) const
     {
-	return *tree::value( mRefinements, graph::value( mMappings, v ) );
+	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
+	if( gval->isInside() )
+	{
+	    const typename RefinementT::ValueT& tval = tree::value( mRefinements, static_cast< InsideGraphValue& >( *gval ).treeNode() );
+	    return std::make_optional( std::reference_wrapper< const InteriorTreeValue >( *tval ) );
+	}
+	else
+	    return std::nullopt;
     }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
@@ -217,7 +237,11 @@ class RefinementTree
     template< typename EnclosureT2 >
     std::vector< NodeT > image( const EnclosureT2& from, const NodeT& subtreeRoot )
     {
-	return imageRecursive( from, graph::value( leafMapping(), subtreeRoot ) );
+	const typename MappingT::ValueT& gval = graph::value( mMappings, subtreeRoot );
+	if( gval->isInside() )
+	    return imageRecursive( from, static_cast< const InsideGraphValue& >( *gval ).treeNode() );
+	else
+	    return {};
     }
 
     // helper function for recursive calls of image
@@ -243,7 +267,6 @@ class RefinementTree
     	    return parts;
     	else if( tree::isLeaf( mRefinements, to ) )
     	{
-	    // for debugging, later use static_cast
 	    parts.push_back( static_cast< const LeafTreeValue& >( tv ).graphNode() );
     	}
     	else
@@ -268,7 +291,11 @@ class RefinementTree
     //! \return all leaves in subtree at v
     std::vector< NodeT > leaves( const NodeT& v ) const
     {
-	return leaves( graph::value( mMappings, v ) );
+	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
+	if( gval->isInside() )
+	    return leaves( static_cast< const InsideGraphValue& >( *gval ).treeNode() );
+	else
+	    return {};
     }
     
     //! \return all leaves in subtree at subRoot
@@ -315,19 +342,22 @@ class RefinementTree
 	return postimg;
     }
 
-    //! \return true if trg is deemed reachable from src
+    //! \return true if trg is deemed reachable from srcVal
     // \todo eventually parametrize this
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
-    Ariadne::ValidatedUpperKleenean isReachable( const NodeT& src, const NodeT& trg ) const
+    Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue& srcVal, const NodeT& trg ) const
     {
-	const EnclosureT& srcBox = nodeValue( src ).getEnclosure()
-	    , trgBox = nodeValue( trg ).getEnclosure();
-
-	Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
-	auto mapIntersection = Ariadne::intersection( ubMapped, trgBox );
-	Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
-
-	return doesInter;
+	std::optional< std::reference_wrapper< const InteriorTreeValue > > trgBox = nodeValue( trg );
+	if( trgBox )
+	{
+	    const EnclosureT& srcBox = srcVal.getEnclosure();
+	    Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
+	    auto mapIntersection = Ariadne::intersection( ubMapped, trgBox.value().get().getEnclosure() );
+	    Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
+	    return doesInter;
+	}
+	else
+	    return !srcVal.isSafe();
     }
 
     /*! 
@@ -336,8 +366,16 @@ class RefinementTree
     */
     void refine( NodeT& v, const IRefinementStrategy< IntervalT >& r )
     {
-    	typename RefinementT::NodeT treev = graph::value( mMappings, v );
-    	//! \todo handle case: if v is not a leaf
+	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
+	// interior node cannot be refined -> do nothing
+	if( !gval->isInside() )
+	    return;
+	
+	InsideGraphValue& inGval = static_cast< InsideGraphValue& >( *gval );
+    	typename RefinementT::NodeT treev = inGval.treeNode();
+	// interior node is already refined - THIS TEST IS WRONG! leaves are to be refined!
+	// if( tree::isLeaf( mRefinements, treev ) )
+	//     return;
 	
     	// if v is leaf:
     	// obtain refinements of node v as list of appropriate length
@@ -364,13 +402,14 @@ class RefinementTree
 	}
 	
     	// add edges
+	//! \todo see whether it's worthwhile to use InsideGraphValues directly instead of relying on pre- and postimage to do the job
 	std::vector< NodeT > pres( preimage( v ) );
 	std::vector< NodeT > posts( postimage( v ) );
 	// append all children of refined node, because center mapping refinements may introduce new links absent at parent level
 	// simply adding v is fine, because pres and posts will be traced down to leaf
 	pres.push_back( v );
 	posts.push_back( v );
-
+	
     	for( NodeT& refined : refinedNodes )
     	{
     	    // determine which elements of the preimage of v map to which refined component
@@ -378,7 +417,8 @@ class RefinementTree
     	    {
     		for( NodeT& preLeaf : leaves( pre ) )
     		{
-    		    if( possibly( isReachable( preLeaf, refined ) ) )
+		    const InteriorTreeValue& preVal = nodeValue( preLeaf ).value(); // obtained from tree, so should have value
+    		    if( possibly( isReachable( preVal, refined ) ) )
 			graph::addEdge( mMappings, preLeaf, refined );
     		}
     	    }
@@ -387,7 +427,8 @@ class RefinementTree
     	    {
     		for( NodeT& postLeaf : leaves( post ) )
     		{
-		    if( possibly( isReachable( refined, postLeaf ) ) )
+		    const InteriorTreeValue& refinedVal = nodeValue( refined ).value(); // refined node is also in tree
+		    if( possibly( isReachable( refinedVal, postLeaf ) ) )
 			graph::addEdge( mMappings, refined, postLeaf );
     		}
     	    }
@@ -413,18 +454,25 @@ class RefinementTree
     }
 
   private:
-    //! \brief add vertex to graph and ensure that tn holds the vertex
+    //! \brief add interior vertex to graph and ensure that tn holds the vertex
     typename MappingT::VertexT addToGraph( typename RefinementT::NodeT& tn )
     {
-	const typename MappingT::VertexT& vadded = *mMappings.addVertex( tn );
-	static_cast< LeafTreeValue* >( tree::value( mRefinements, tn ).get() )->setGraphNode( vadded );
+	auto pAddedVal = std::shared_ptr< IGraphValue >( new InsideGraphValue( tn ) );
+	const typename MappingT::VertexT& vadded = *mMappings.addVertex( pAddedVal );
+	static_cast< LeafTreeValue& >( *tree::value( mRefinements, tn ) ).setGraphNode( vadded );
 	return vadded;
     }
 
     //! \brief removes v from the graph and transforms the tree node stored into an interior node
     void removeFromGraph( NodeT& n )
     {
-	tree::value( mRefinements, graph::value( mMappings, n ) ).reset( new InteriorTreeValue( nodeValue( n ) ) ); // copy & slice
+	const typename MappingT::ValueT& gval = graph::value( mMappings, n );
+	if( gval->isInside() )
+	{
+	    InsideGraphValue& inGval = static_cast< InsideGraphValue& >( *gval );
+	    typename RefinementT::ValueT& tval = tree::value( mRefinements, inGval.treeNode() );
+	    tval.reset( new InteriorTreeValue( *tval ) ); // copy & slice
+	}
 	graph::removeVertex( mMappings, n );
     }
     
@@ -455,13 +503,15 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 									       , NodeIterT iImgBegin, NodeIterT iImgEnd
 									       , const std::vector< typename RefinementTree< IntervalT >::NodeT >& path = {} )
 {
+    typedef RefinementTree< IntervalT > Rtree;
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
     {
 	// std::cout << "looking for counterex at " << rtree.nodeValue( *iImgBegin ).getEnclosure()
 		  // << " which is " << rtree.nodeValue( *iImgBegin ).isSafe() << " safe " << std::endl;
 
 	// counterexample found
-	if( !definitely( rtree.nodeValue( *iImgBegin ).isSafe() ) )
+	// image should never contain always-unsafe-node
+	if( !definitely( rtree.nodeValue( *iImgBegin ).value().get().isSafe() ) )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
@@ -473,7 +523,10 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	typename std::vector< typename RefinementTree< IntervalT >::NodeT >::const_iterator iBeginLoop =
 	    std::find_if( path.begin(), path.end()
 			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {
-			      return rtree.nodeValue( n ) == rtree.nodeValue( *iImgBegin ); } );
+			      std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > on = rtree.nodeValue( n );
+			      if( !on )          // image is always inside graph value
+				  return false;
+			      return on.value().get() == rtree.nodeValue( *iImgBegin ).value().get(); } );
 	// no loop found
 	if( iBeginLoop == path.end() )
 	{
@@ -509,24 +562,32 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 					    , const Ariadne::Effort& effort )
 {
     typedef RefinementTree< IntervalT > Rtree;
+    
+    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oBeginCex = rtree.nodeValue( *beginCounter );
+    // always unsafe node is terminal state because it is unsafe
+    if( !oBeginCex )
+	return false;
     // one or less nodes in counterexample
     if( beginCounter + 1 >= endCounter )
 	return false;
     // center is not contained in initial image
     if( std::none_of( beginImage, endImage,
-		      [&rtree, &beginCounter, &effort] ( const typename Rtree::NodeT& imgNode )
+		      [&rtree, &oBeginCex, &effort] ( const typename Rtree::NodeT& imgNode )
 		      {
-			  const typename Rtree::EnclosureT& startCexEnc = rtree.nodeValue( *beginCounter ).getEnclosure()
-			      , imgEnc = rtree.nodeValue( imgNode ).getEnclosure();
+			  const typename Rtree::EnclosureT& startCexEnc = oBeginCex.value().get().getEnclosure()
+			      , imgEnc = rtree.nodeValue( imgNode ).value().get().getEnclosure();
 			  Ariadne::Kleenean contained = possibly( imgEnc.contains( startCexEnc.centre() ) );
 			  return possibly( contained.check( effort ) );
 		      } ) )
 	return true;
 	
-    Ariadne::Box< IntervalT > currBox = rtree.nodeValue( *beginCounter ).getEnclosure();
+    Ariadne::Box< IntervalT > currBox = oBeginCex.value().get().getEnclosure();
     for( ; beginCounter != endCounter - 1; ++beginCounter )
     {
-	Ariadne::Box< IntervalT > nextBox = rtree.nodeValue( *(beginCounter + 1) ).getEnclosure();
+	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oNext = rtree.nodeValue( *(beginCounter + 1) );
+	if( !oNext )     // always unsafe node is terminal
+	    return false;
+	Ariadne::Box< IntervalT > nextBox = oNext.value().get().getEnclosure();
 	if( definitely( !nextBox.contains( currBox.centre() ) ) )
 	    return true; // should be indeterminate
 	currBox = nextBox;
@@ -589,28 +650,38 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 								  , const IRefinementStrategy< IntervalT >& refinementStrat
 								  , const uint maxNodes )
 {
+    class NodeComparator;
+    typedef RefinementTree< IntervalT > Rtree;
+    typedef std::set< typename Rtree::NodeT, NodeComparator > NodeSet;
+
     class NodeComparator
     {
       public:
-	NodeComparator( const RefinementTree< IntervalT >& rtree ) : mRtree( rtree ) {}
+	NodeComparator( const Rtree& rtree ) : mRtree( rtree ) {}
 		       
 	// NodeComparator( const NodeComparator& orig ) : mRtree( orig.mRtree ) {}
 
 	// NodeComparator& operator =( const NodeComparator& orig ) { mRtree = orig.mRtree; return *this; }
 
-	bool operator ()( const typename RefinementTree< IntervalT >::NodeT& n1
-		       , const typename RefinementTree< IntervalT >::NodeT& n2 ) const
+	bool operator ()( const typename Rtree::NodeT& n1
+		       , const typename Rtree::NodeT& n2 ) const
 	{
-	    return mRtree.get().nodeValue( n1 ).id() < mRtree.get().nodeValue( n2 ).id();
+	    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > otval1 = mRtree.get().nodeValue( n1 )
+		, otval2 = mRtree.get().nodeValue( n2 );
+	    // always unsafe node is always equal to always unsafe node
+	    if( !otval1 && !otval2 )
+		return true;
+	    if( !otval1 || !otval2 )
+		return false;
+	    return otval1.value().get().id() < otval2.value().get().id();
 	}
 
       private:
-	std::reference_wrapper< const RefinementTree< IntervalT > > mRtree;
+	std::reference_wrapper< const Rtree > mRtree;
     };
 
     // \todo test wether repopulating image anew every iteration
     // or identifying and removing refined nodes is more efficient
-    typedef std::set< typename RefinementTree< IntervalT >::NodeT, NodeComparator > NodeSet;
     NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
     {
 	auto img = rtree.image( initialSet );
@@ -621,29 +692,37 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
     {
 	std::cout << "new iteration, number of nodes " << rtree.tree().size() << "/" << maxNodes << std::endl;
 
-	// std::cout << "graph " << std::endl;
-	// std::function< Ariadne::Box< IntervalT >( const typename RefinementTree< IntervalT >::MappingT::ValueT& ) > conv = [&rtree] (const typename RefinementTree< IntervalT >::RefinementT::NodeT& v) -> Ariadne::ExactBoxType { return tree::value( rtree.tree(), v ).getEnclosure(); };
-	// graph::print( std::cout, rtree.leafMapping(), conv );
-	
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 	if( counterexample.empty() )
 	{
 	    std::cout << "no counterexample found" << std::endl;
-	    return std::vector< typename RefinementTree< IntervalT >::NodeT >();
+	    return std::vector< typename Rtree::NodeT >();
 	}
 
 	std::cout << "found counterexample " << std::endl;
 	for( auto trajNode : counterexample )
-	    std::cout << rtree.nodeValue( trajNode ).getEnclosure() << "  ->  ";
+	{
+	    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > otrajValue = rtree.nodeValue( trajNode );
+	    if( otrajValue )
+		std::cout << otrajValue.value().get().getEnclosure();
+	    else
+		std::cout << "[unsafe]";
+	    std::cout << "  ->  ";
+	}
 	std::cout << std::endl;
 
-	// Ariadne::Box< IntervalT > unsafeBox = 
+	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > otermVal = rtree.nodeValue( counterexample.back() );
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
 							      , initialImage.begin(), initialImage.end()
 							      , effort ) )
-	    , definitelyUnsafe = definitely( rtree.constraints().separated( rtree.nodeValue( counterexample.back() ).getEnclosure() ) );
+	    , definitelyUnsafe = false;
+	if( !otermVal )
+	    definitelyUnsafe = true;
+	else
+	    definitely( rtree.constraints().separated( otermVal.value().get().getEnclosure() ) );
+	
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
 	    std::cout << "non spurious counterexample found" << std::endl;
@@ -657,13 +736,21 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	// want to refine last state as well
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
-	    std::cout << "refining box " << rtree.nodeValue( counterexample[ i ] ).getEnclosure() << std::endl;
+	    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oref = rtree.nodeValue( counterexample[ i ] );
+
+	    std::cout << "refining box ";
+	    if( oref )
+		std::cout << oref.value().get().getEnclosure();
+	    else
+		std::cout << "[unsafe]";
+	    std::cout << std::endl;
+	    
 	    rtree.refine( counterexample[ i ], refinementStrat );
 	    // iterate over components of initial set and add their images starting from refined node for best performance
-	    for( const typename RefinementTree< IntervalT >::NodeT& initial : initialImage )
+	    for( const typename Rtree::NodeT& initial : initialImage )
 	    {
-		const typename  RefinementTree< IntervalT >::NodeT& cexNode = counterexample[ i ];
-		auto refinedImg = rtree.image( rtree.nodeValue( initialImage ).getEnclosure(), cexNode );
+		std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > itvInitial = rtree.nodeValue( initial );
+		auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure(), counterexample[ i ] );
 		initialImage.insert( refinedImg.begin(), refinedImg.end() );
 	    }
 	    
@@ -675,7 +762,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	// \todo test against this code
 	// replaced by code in for loop over counterexs above
 	// NodeSet newInitialImage = NodeSet( NodeComparator( rtree ) );
-	// for( const typename RefinementTree< IntervalT >::NodeT& prevImage : initialImage )
+	// for( const typename Rtree::NodeT& prevImage : initialImage )
 	// {
 	//     auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
 	    

@@ -31,7 +31,13 @@ struct RefinementTreeTest : public ITestGroup
 	
 	Ariadne::Box< IntervalT > operator ()( const typename RefinementTree< IntervalT >::MappingT::ValueT& val )
 	{
-	    return tree::value( mRtree.tree(), val )->getEnclosure();
+	    if( val->isInside() )
+	    {
+		auto& inVal = static_cast< typename RefinementTree< IntervalT >::InsideGraphValue& >( *val );
+		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
+	    }
+	    else
+		return Ariadne::Box< IntervalT >::empty();
 	}
 	
       private:
@@ -81,6 +87,15 @@ struct RefinementTreeTest : public ITestGroup
 	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
 	return RefinementTree< IntervalT >( rootBox, cs, f, Ariadne::Effort( 5 ) );
     }
+
+    template< typename RefTree >
+    static void printNodeValue( const std::optional< std::reference_wrapper< const typename RefTree::InteriorTreeValue > > otn )
+    {
+	if( otn )
+	    std::cout << otn.value().get().getEnclosure() << " ";
+	else
+	    std::cout << "[unsafe] ";
+    }
     
     // test expansion:
     // proper number of nodes in graph: number of refinements - 1
@@ -113,7 +128,7 @@ struct RefinementTreeTest : public ITestGroup
 	STATEFUL_TEST( ImageTest );
     };
     
-    // test whether non-leafs are absent from tree
+    // test whether non-leafs are absent from graph
     class NonLeafRemovalTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
