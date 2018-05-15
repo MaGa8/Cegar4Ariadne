@@ -6,4 +6,4 @@ TARGET = runRefinementTreeTest
 
 INCFLAGS += -I $(ARIADNE_DIR)/ -I $(ARIADNE_DIR)/source/
 LIBFLAGS = -L $(ARIADNE_DIR)/build/ -l ariadne -l ariadne-kernel
-OPTFLAGS = -std=c++14 -g -w
+OPTFLAGS = -std=c++17 -g -w

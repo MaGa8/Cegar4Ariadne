@@ -37,7 +37,7 @@ struct RefinementTreeTest : public ITestGroup
 		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
 	    }
 	    else
-		return Ariadne::Box< IntervalT >::empty();
+		return Ariadne::Box< IntervalT >::zero( 2 ); // hard coded cause using 2d tests only
 	}
 	
       private:
