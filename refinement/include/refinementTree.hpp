@@ -176,14 +176,21 @@ class RefinementTree
 						      ) )
 	, mEffort( effort )
     {
+	// add always unsafe node
+	auto iAddedUnsafe = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
+	if( iAddedUnsafe == graph::vertices( mMappings ).second )
+	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
+	mUnsafeNode = *iAddedUnsafe;
 	// set up root
 	typename RefinementT::NodeT rt = root( mRefinements );
 	NodeT initialNode = addToGraph( rt );
 	const InteriorTreeValue& otv = nodeValue( initialNode ).value(); // should never fail
+	// self loop root -> root
 	if( possibly( isReachable( otv, initialNode ) ) )
 	    addEdge( mMappings, initialNode, initialNode );
-	// add always unsafe node
-	graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
+	// transition to unsafe: only can transition to unsafe, not from it
+	if( possibly( isReachable( otv, mUnsafeNode ) ) )
+	    addEdge( mMappings, initialNode, mUnsafeNode );
     }
 
     //! \return constraints determining the safe set
@@ -347,17 +354,22 @@ class RefinementTree
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue& srcVal, const NodeT& trg ) const
     {
+	const EnclosureT& srcBox = srcVal.getEnclosure();
+	Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
 	std::optional< std::reference_wrapper< const InteriorTreeValue > > trgBox = nodeValue( trg );
 	if( trgBox )
 	{
-	    const EnclosureT& srcBox = srcVal.getEnclosure();
-	    Ariadne::UpperBoxType ubMapped =  Ariadne::image( srcBox, mDynamics );
 	    auto mapIntersection = Ariadne::intersection( ubMapped, trgBox.value().get().getEnclosure() );
 	    Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
 	    return doesInter;
 	}
 	else
-	    return !srcVal.isSafe();
+	{
+	    const EnclosureT& initialRefEnc = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
+	    Ariadne::LowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, srcBox ) == srcBox;
+	    return !intersectionEqual.check( mEffort );
+	    // wrong! want to know where srcVal maps to! return !srcVal.isSafe();
+	}
     }
 
     /*! 
@@ -454,6 +466,7 @@ class RefinementTree
     }
 
   private:
+
     //! \brief add interior vertex to graph and ensure that tn holds the vertex
     typename MappingT::VertexT addToGraph( typename RefinementT::NodeT& tn )
     {
@@ -481,7 +494,7 @@ class RefinementTree
     Ariadne::Effort mEffort;
     RefinementT mRefinements;
     MappingT mMappings;
-    NodeT mIsUnsafeNode;
+    NodeT mUnsafeNode;
 };
 
 /*!

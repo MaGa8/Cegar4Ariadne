@@ -83,6 +83,7 @@ bool RefinementTreeTest::ExpansionTest::check() const
 	D( std::cout << "previous height " << mPreviousHeight << ", new height " << newHeight << " expanded node at depth " << mExpandNodeDepth << std::endl; );
 	return false;
     }
+
     return true;
 }
 
@@ -351,20 +352,12 @@ bool RefinementTreeTest::PostimageTest::check() const
 	    if( isReach && iFound == postimg.end() )
 	    {
 		D( std::cout << "failed! " << refinementBox << " maps into " << leafBox << " but is not contained in postimage" << std::endl; );
-
-		std::function< typename ExactRefinementTree::EnclosureT( const typename ExactRefinementTree::MappingT::ValueT& ) > printConv = GraphVertexPrintConverter( *mpRtree );
-		graph::print( std::cout, mpRtree->leafMapping(), printConv );
-		
 		return false;
 	    }
 	    // false positive
 	    if( !isReach && iFound != postimg.end() )
 	    {
 		D( std::cout << "failed! " << refinementBox << " does not map into " << leafBox << " but is contained in postimage" << std::endl; );
-
-		std::function< typename ExactRefinementTree::EnclosureT( const typename ExactRefinementTree::MappingT::ValueT& ) > printConv = GraphVertexPrintConverter( *mpRtree );
-		graph::print( std::cout, mpRtree->leafMapping(), printConv );
-		
 		return false;
 	    }
 	}
@@ -433,10 +426,10 @@ void RefinementTreeTest::init()
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
     addTest( new ExpansionTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new LeavesTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new ImageTest( mTestSize, mRepetitions ), pRcontinuous );
-    addTest( new NonLeafRemovalTest( mTestSize, mRepetitions ), pRcontinuous );
-    addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
+    // addTest( new LeavesTest( mTestSize, mRepetitions ), pRinterleave );
+    // addTest( new ImageTest( mTestSize, mRepetitions ), pRcontinuous );
+    // addTest( new NonLeafRemovalTest( mTestSize, mRepetitions ), pRcontinuous );
+    // addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
+    // addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
+    // addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
 }
