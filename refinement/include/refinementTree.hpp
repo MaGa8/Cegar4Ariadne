@@ -556,7 +556,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 	// counterexample found
 	// image should never contain always-unsafe-node --> that assumption is wrong!
 	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oImg = rtree.nodeValue( *iImgBegin );
-	if( !oImg || !definitely( oImg.value().get().isSafe() ) )
+	if( !definitely( rtree.isSafe( *iImgBegin ) ) )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
@@ -792,22 +792,28 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	    else
 		std::cout << "[unsafe]";
 	    std::cout << std::endl;
-	    
-	    rtree.refine( counterexample[ i ], refinementStrat );
-	    // iterate over components of initial set and add their images starting from refined node for best performance
-	    for( const typename Rtree::NodeT& initial : initialImage )
+
+	    if( oref )
 	    {
-		const typename Rtree::IGraphValue& gValCex = *graph::value( rtree.leafMapping(), counterexample[ i ] );
-		if( gValCex.isInside() )
+		const typename Rtree::IGraphValue& graphValRef = *graph::value( rtree.leafMapping(), counterexample[ i ] ); // dont use this after refinement
+		const typename Rtree::RefinementT::NodeT& treeNodeRef = static_cast< const typename Rtree::InsideGraphValue& >( graphValRef ).treeNode();
+		rtree.refine( counterexample[ i ], refinementStrat );
+		// iterate over components of initial set and add their images starting from refined node for best performance
+		for( const typename Rtree::NodeT& initial : initialImage )
 		{
-		    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > itvInitial = rtree.nodeValue( initial );
-		    auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure()
-						   , static_cast< const typename Rtree::InsideGraphValue& >( gValCex ).treeNode() );
-		    initialImage.insert( refinedImg.begin(), refinedImg.end() );
+		    std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > treeValInitial = rtree.nodeValue( initial );
+		    if( treeValInitial )
+		    {
+			// use shortcut later
+			auto refinedImg = rtree.image( treeValInitial.value().get().getEnclosure(), treeNodeRef );
+			// surely works
+			// auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure() );
+			initialImage.insert( refinedImg.begin(), refinedImg.end() );
+		    }
+		// }
 		}
+		initialImage.erase( counterexample[ i ] );
 	    }
-	    
-	    initialImage.erase( counterexample[ i ] );
 	}
 
 	// \todo test against this code
