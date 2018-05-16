@@ -45,7 +45,7 @@ class RefinementTree
 	    , mSafe( false )
 	{}
 	
-	InteriorTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedLowerKleenean& safe )
+	InteriorTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedKleenean& safe )
 	    : mId( id )
 	    , mEnclosure( e )
 	    , mSafe( safe )
@@ -62,7 +62,7 @@ class RefinementTree
 	const EnclosureT& getEnclosure() const { return mEnclosure; }
 
 	//! \return true if the box stored is completely covered by all constraints, indeterminate if it lies within the initial abstraction but is not covered completely by all constraints and false if it lies outside of the initial abstraction
-	Ariadne::ValidatedLowerKleenean isSafe() const { return mSafe; }
+	Ariadne::ValidatedKleenean isSafe() const { return mSafe; }
 
 	bool operator ==( const InteriorTreeValue& tv ) const
 	{
@@ -74,7 +74,7 @@ class RefinementTree
       private:
 	unsigned long mId;
 	EnclosureT mEnclosure;
-	Ariadne::ValidatedLowerKleenean mSafe;
+	Ariadne::ValidatedKleenean mSafe;
     };
 
     //! \class value to store in leaves of refinement tree, does map to graph
@@ -83,7 +83,7 @@ class RefinementTree
       public:
 	LeafTreeValue() {}
 
-	LeafTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedLowerKleenean& safe )
+	LeafTreeValue( const unsigned long& id, const EnclosureT& e, const Ariadne::ValidatedKleenean& safe )
 	    : InteriorTreeValue( id, e, safe )
 	{}
 
@@ -170,11 +170,12 @@ class RefinementTree
 		    )
 	: mConstraints( constraints )
 	, mDynamics( dynamics )
-	, mRefinements( typename RefinementT::ValueT( new LeafTreeValue( 0, initial, constraints.covers( initial ).check( effort ) )
+	, mEffort( effort )
+	, mNodeIdCounter( 0 )
+	, mRefinements( typename RefinementT::ValueT( makeLeaf( initial )
 						      //				   , universeBox( initial.dimension() )
 						      //, constraints.covers( universeBox( initial.dimension() ) ).check( effort )
 						      ) )
-	, mEffort( effort )
     {
 	// add always unsafe node
 	auto iAddedUnsafe = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
@@ -235,12 +236,7 @@ class RefinementTree
     {
 	std::optional< std::reference_wrapper< const InteriorTreeValue > > on = nodeValue( n );
 	if( on )
-	{
-	    if( definitely( on.value().get().isSafe() ) )
-		return true;
-	    else
-		return Ariadne::indeterminate;
-	}
+	    return on.value().get().isSafe();
 	else
 	    return false;
     }
@@ -263,9 +259,8 @@ class RefinementTree
     std::vector< NodeT > image( const EnclosureT2& from, const typename RefinementT::NodeT& subtreeRoot ) const
     {
 	std::vector< NodeT > img = imageRecursive( from, subtreeRoot );
-	// code non functional as of now, requires tree value to store ValidatedKleenean as safety flag
-	auto iUnsafe = std::find_if( img.begin(), img.end(), [this] (const NodeT& n) { return definitely( !isSafe( n ) ); } );
-	if( iUnsafe != img.end() )
+	// image recursive does not add outside
+	if( definitely( !(Ariadne::intersection( from, tree::value( tree(), tree::root( tree() ) )->getEnclosure() ) == from ) ) )
 	    img.push_back( outside() );
 	return img;
     }
@@ -386,9 +381,7 @@ class RefinementTree
 	for( uint i = 0; i < refined.size(); ++i )
 	{
 	    const EnclosureT& refd = refined[ i ];
-	    tvals[ i ] = typename RefinementT::ValueT( new LeafTreeValue( tree().size() + i
-									  , refined[ i ]
-									  , constraints().covers( refined[ i ] ).check( mEffort ) ) );
+	    tvals[ i ] = typename RefinementT::ValueT( makeLeaf( refined[ i ] ) );
 	}
 	tree::expand( mRefinements, treev, tvals );
 
@@ -498,6 +491,17 @@ class RefinementTree
     	return parts;
     }
 
+    //! \return pointer to newly allocated leaf value ensuring that the safety flag is correctly initialized
+    LeafTreeValue* makeLeaf( const EnclosureT& enc )
+    {
+	return new LeafTreeValue( mNodeIdCounter++, enc
+				  , definitely( constraints().covers( enc ).check( mEffort ) )
+				  ? Ariadne::ValidatedKleenean( true )
+				  : (definitely( constraints().separated( enc ).check( mEffort ) )
+				     ? Ariadne::ValidatedKleenean( false )
+				     : Ariadne::indeterminate) );
+    }
+    
     //! \brief add interior vertex to graph and ensure that tn holds the vertex
     typename MappingT::VertexT addToGraph( typename RefinementT::NodeT& tn )
     {
@@ -523,6 +527,7 @@ class RefinementTree
     Ariadne::ConstraintSet mConstraints;
     Ariadne::EffectiveVectorFunction mDynamics;
     Ariadne::Effort mEffort;
+    unsigned long mNodeIdCounter;
     RefinementT mRefinements;
     MappingT mMappings;
     NodeT mOutsideNode;
@@ -778,16 +783,11 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	}
 	std::cout << std::endl;
 
-	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > otermVal = rtree.nodeValue( counterexample.back() );
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
 							      , initialImage.begin(), initialImage.end()
 							      , effort ) )
-	    , definitelyUnsafe = false;
-	if( !otermVal )
-	    definitelyUnsafe = true;
-	else
-	    definitely( rtree.constraints().separated( otermVal.value().get().getEnclosure() ) );
+	    , definitelyUnsafe = definitely( !rtree.isSafe( counterexample.back() ) );
 	
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
