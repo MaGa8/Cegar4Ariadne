@@ -823,7 +823,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 		    if( treeValInitial )
 		    {
 			// use shortcut later
-			auto refinedImg = rtree.image( treeValInitial.value().get().getEnclosure(), treeNodeRef );
+			auto refinedImg = rtree.image( initialSet, treeNodeRef );
 			// surely works
 			// auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure() );
 			initialImage.insert( refinedImg.begin(), refinedImg.end() );
