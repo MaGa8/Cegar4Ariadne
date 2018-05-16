@@ -1,6 +1,5 @@
 #include "refinementTreeTest.hpp"
 #include "testMacros.hpp"
-#include "refinementStrategy.hpp"
 
 #include "geometry/interval.decl.hpp"
 #include "geometry/box.decl.hpp"
@@ -55,7 +54,7 @@ void RefinementTreeTest::ExpansionTest::iterate()
     mPreviousNoNodes = mpRtree->tree().size();
     mPreviousHeight = tree::subtreeHeight( mpRtree->tree(), tree::root( mpRtree->tree() ) );
     mExpandNodeDepth = tree::depth( mpRtree->tree()
-				    , static_cast< typename ExactRefinementTree::InsideGraphValue& >( *graph::value( mpRtree->leafMapping(), *iexp ) ).treeNode() );
+				    , static_cast< InsideGraphValue< typename ExactRefinementTree::RefinementT::NodeT >& >( *graph::value( mpRtree->leafMapping(), *iexp ) ).treeNode() );
 
     mpRtree->refine( *iexp, *mpRefiner );
 }
@@ -177,7 +176,7 @@ bool RefinementTreeTest::ImageTest::check() const
 	    typename std::vector< typename ExactRefinementTree::NodeT >::iterator iImg;
 	    iImg = std::find_if( imageSmallerBox.begin(), imageSmallerBox.end()
 				 , [&leaf, this] (const typename ExactRefinementTree::NodeT& n) {
-				     std::optional< std::reference_wrapper< const typename ExactRefinementTree::InteriorTreeValue > > oN = mpRtree->nodeValue( n );
+				     std::optional< std::reference_wrapper< const InteriorTreeValue< typename ExactRefinementTree::EnclosureT > > > oN = mpRtree->nodeValue( n );
 				     if( !oN )
 					 return false;
 				     return mpRtree->nodeValue( leaf ).value().get() == oN.value().get(); } );
@@ -220,7 +219,7 @@ bool RefinementTreeTest::NonLeafRemovalTest::check() const
 	if( !tree::isLeaf( mpRtree->tree(), nex ) )
 	{
 	    typename ExactRefinementTree::MappingT::VIterT ivfound = graph::findVertex( mpRtree->leafMapping()
-											, typename ExactRefinementTree::MappingT::ValueT( new ExactRefinementTree::InsideGraphValue( nex ) ) );
+											, typename ExactRefinementTree::MappingT::ValueT( new InsideGraphValue< typename ExactRefinementTree::RefinementT::NodeT >( nex ) ) );
 	    if( ivfound != vertices( mpRtree->leafMapping() ).second )
 	    {
 		D( std::cout << "box " << tree::value( mpRtree->tree(), nex )->getEnclosure()
@@ -281,7 +280,7 @@ bool RefinementTreeTest::PreimageTest::check() const
 		, refinementBox = mpRtree->nodeValue( refinement ).value().get().getEnclosure();
 	    auto iFound = std::find_if( preimg.begin(), preimg.end()
 					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) {
-					    std::optional< std::reference_wrapper< const typename ExactRefinementTree::InteriorTreeValue > > opn = mpRtree->nodeValue( pn );
+					    std::optional< std::reference_wrapper< const InteriorTreeValue< typename ExactRefinementTree::EnclosureT > > > opn = mpRtree->nodeValue( pn );
 					    if( !opn )
 						return false;
 					    return mpRtree->nodeValue( leaf ).value().get() == opn.value().get(); } );
@@ -345,7 +344,7 @@ bool RefinementTreeTest::PostimageTest::check() const
 		, refinementBox = mpRtree->nodeValue( refinement ).value().get().getEnclosure();
 	    auto iFound = std::find_if( postimg.begin(), postimg.end()
 					, [this, &leaf] (const typename ExactRefinementTree::NodeT& pn) {
-					    std::optional< std::reference_wrapper< const typename ExactRefinementTree::InteriorTreeValue > > opn = mpRtree->nodeValue( pn );
+					    std::optional< std::reference_wrapper< const InteriorTreeValue< typename ExactRefinementTree::EnclosureT > > > opn = mpRtree->nodeValue( pn );
 					    if( !opn )
 						return false;
 					    return mpRtree->nodeValue( leaf ).value().get() == opn.value().get(); } );
@@ -424,56 +423,56 @@ bool RefinementTreeTest::AlwaysUnsafeTest::check() const
     return true;
 }
 
-RefinementTreeTest::TEST_CTOR( PositiveCounterexampleTest, "test whether counterexample can be found" );
+// RefinementTreeTest::TEST_CTOR( PositiveCounterexampleTest, "test whether counterexample can be found" );
 
-void RefinementTreeTest::PositiveCounterexampleTest::iterate() {}
+// void RefinementTreeTest::PositiveCounterexampleTest::iterate() {}
 
-bool RefinementTreeTest::PositiveCounterexampleTest::check() const
-{
-    /*
-      l = nonSafetyLevel, c = constraintBoundary
-      need: 1 - 1 / 2^x + (1 + c) - (1 + c) / 2^x > l
-      => - (2 + c) / 2^x > l - 2 - c
-      => - (2 + c) / (l - 2 - c) > 2^x
-      => x > log2( (2 + c) / (2 + c - l) )
-      in one dimension, so assuming equal number of splits along each dimension, multiply by 2
-    */
-    const double constraintBoundary = 2;
-    const uint refinementDepth = 8;
-    Ariadne::Effort effort( 5 );
+// bool RefinementTreeTest::PositiveCounterexampleTest::check() const
+// {
+//     /*
+//       l = nonSafetyLevel, c = constraintBoundary
+//       need: 1 - 1 / 2^x + (1 + c) - (1 + c) / 2^x > l
+//       => - (2 + c) / 2^x > l - 2 - c
+//       => - (2 + c) / (l - 2 - c) > 2^x
+//       => x > log2( (2 + c) / (2 + c - l) )
+//       in one dimension, so assuming equal number of splits along each dimension, multiply by 2
+//     */
+//     const double constraintBoundary = 2;
+//     const uint refinementDepth = 8;
+//     Ariadne::Effort effort( 5 );
     
-    D( std::cout << "preimage test init" << std::endl; );
-    Ariadne::ExactBoxType rootBox( { {0,1}, {0,3} } )
-	, initialBox( { {0,0.75}, {0,1.25} } );
-    // need refinement tree with non-static dynamics
-    Ariadne::RealVariable x( "x" ), y( "y" );
-    Ariadne::Space< Ariadne::Real > fspace = {x, y};
-    Ariadne::EffectiveVectorFunction f = Ariadne::make_function( fspace, {x * x, y * y} );
+//     D( std::cout << "preimage test init" << std::endl; );
+//     Ariadne::ExactBoxType rootBox( { {0,1}, {0,3} } )
+// 	, initialBox( { {0,0.75}, {0,1.25} } );
+//     // need refinement tree with non-static dynamics
+//     Ariadne::RealVariable x( "x" ), y( "y" );
+//     Ariadne::Space< Ariadne::Real > fspace = {x, y};
+//     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( fspace, {x * x, y * y} );
 
-    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::EffectiveConstraint c1 = ( (a + b) <= constraintBoundary );
-    Ariadne::EffectiveConstraintSet cs = {c1};
+//     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+// 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+//     Ariadne::EffectiveConstraint c1 = ( (a + b) <= constraintBoundary );
+//     Ariadne::EffectiveConstraintSet cs = {c1};
 
-    ExactRefinementTree rtree( rootBox, cs, f, effort );
+//     ExactRefinementTree rtree( rootBox, cs, f, effort );
 
-    // refine range (0,1.1) to less than 0.1, so 1.1 / 2^x <= 0.1
-    std::cout << "need to refine " << refinementDepth << " levels " << std::endl;
-    refineEqualDepth( rtree, refinementDepth );
+//     // refine range (0,1.1) to less than 0.1, so 1.1 / 2^x <= 0.1
+//     std::cout << "need to refine " << refinementDepth << " levels " << std::endl;
+//     refineEqualDepth( rtree, refinementDepth );
 
-    // root box is initial state
-    std::vector< typename ExactRefinementTree::NodeT > initImage = rtree.image( initialBox );
-    auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );
+//     // root box is initial state
+//     std::vector< typename ExactRefinementTree::NodeT > initImage = rtree.image( initialBox );
+//     auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );
 
-    std::cout << "is counterexample spurious? "
-	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), initImage.begin(), initImage.end(), effort )
-	      << std::endl;
+//     std::cout << "is counterexample spurious? "
+// 	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), initImage.begin(), initImage.end(), effort )
+// 	      << std::endl;
 
-    if( cexPath.empty() )
-	return false;
+//     if( cexPath.empty() )
+// 	return false;
     
-    return true;
-}
+//     return true;
+// }
 
 
 RefinementTreeTest::GROUP_CTOR( RefinementTreeTest, "refinement tree" );
@@ -491,5 +490,5 @@ void RefinementTreeTest::init()
     addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
     addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
     addTest( new AlwaysUnsafeTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
+    // addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
 }

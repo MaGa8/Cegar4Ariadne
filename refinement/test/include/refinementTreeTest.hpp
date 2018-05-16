@@ -2,8 +2,7 @@
 #define REFINEMENT_TREE_TEST
 
 #include "testGroupInterface.hpp"
-#include "refinementTree.hpp"
-#include "refinementStrategy.hpp"
+#include "cegar.hpp"
 
 #include "expression/space.hpp"
 #include "expression/expression.hpp"
@@ -33,7 +32,7 @@ struct RefinementTreeTest : public ITestGroup
 	{
 	    if( val->isInside() )
 	    {
-		auto& inVal = static_cast< typename RefinementTree< IntervalT >::InsideGraphValue& >( *val );
+		auto& inVal = static_cast< InsideGraphValue< typename RefinementTree< IntervalT >::RefinementT::NodeT >& >( *val );
 		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
 	    }
 	    else
@@ -89,7 +88,7 @@ struct RefinementTreeTest : public ITestGroup
     }
 
     template< typename RefTree >
-    static void printNodeValue( const std::optional< std::reference_wrapper< const typename RefTree::InteriorTreeValue > > otn )
+    static void printNodeValue( const std::optional< std::reference_wrapper< const InteriorTreeValue< typename RefTree::EnclosureT > > > otn )
     {
 	if( otn )
 	    std::cout << otn.value().get().getEnclosure() << " ";
@@ -166,11 +165,12 @@ struct RefinementTreeTest : public ITestGroup
 	STATEFUL_TEST( AlwaysUnsafeTest );
     };
 
-    //positve test for finding counterexamples
-    class PositiveCounterexampleTest : public ITest
-    {
-    	STATELESS_TEST( PositiveCounterexampleTest );
-    };
+    // move away to cegar test
+    // //positve test for finding counterexamples
+    // class PositiveCounterexampleTest : public ITest
+    // {
+    // 	STATELESS_TEST( PositiveCounterexampleTest );
+    // };
     
     // negative test for finding counterexamples
 
