@@ -630,15 +630,33 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 	return true;
 	
     Ariadne::Box< IntervalT > currBox = oBeginCex.value().get().getEnclosure();
+    Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > currPoint = currBox.centre();
+    const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
     for( ; beginCounter != endCounter - 1; ++beginCounter )
     {
 	std::optional< std::reference_wrapper< const typename Rtree::InteriorTreeValue > > oNext = rtree.nodeValue( *(beginCounter + 1) );
-	if( !oNext )     // always unsafe node is terminal
-	    return false;
-	Ariadne::Box< IntervalT > nextBox = oNext.value().get().getEnclosure();
-	if( definitely( !nextBox.contains( currBox.centre() ) ) )
+	// if( !oNext )     // always unsafe node is terminal, yes, but I'm here to check that it's reachable
+	    // return false;
+	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPoint = rtree.dynamics().evaluate( currPoint );
+	Ariadne::ValidatedKleenean containsMapped;
+
+	std::cout << currPoint << "  to  " << mappedPoint << std::endl;
+
+	if( oNext )
+	{
+	    Ariadne::Box< IntervalT > nextBox = oNext.value().get().getEnclosure();
+	    containsMapped = nextBox.contains( mappedPoint );
+	}
+	else
+	    containsMapped = !rtEnc.contains( mappedPoint );
+	// this is nonsense! should map centre of current box
+	if( definitely( !containsMapped ) )
+	{
+	    // std::cout << mappedPoint << " is inside " << oNext << "?" << std::endl;
 	    return true; // should be indeterminate
-	currBox = nextBox;
+	}
+	
+	currPoint = mappedPoint;
     }
     return false;
     
