@@ -113,7 +113,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPoint = rtree.dynamics().evaluate( currPoint );
 	Ariadne::ValidatedKleenean containsMapped;
 
-	std::cout << currPoint << "  to  " << mappedPoint << std::endl;
+	// std::cout << currPoint << "  to  " << mappedPoint << std::endl;
 
 	if( oNext )
 	{
@@ -180,14 +180,15 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
   \param effort effort to use for calculations
   \param refinementStrat strategy to use for refining individual box
   \param maxNodes number of nodes in tree after which to stop iterations
-  \return sequence of nodes that forms a trajectory starting from the initial set
+  \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
 template< typename IntervalT >
-std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree< IntervalT >& rtree
-								  , const typename RefinementTree< IntervalT >::EnclosureT& initialSet
-								  , const Ariadne::Effort& effort
-								  , const IRefinementStrategy< IntervalT >& refinementStrat
-								  , const uint maxNodes )
+std::pair< Ariadne::ValidatedKleenean
+	   , std::vector< typename RefinementTree< IntervalT >::NodeT > > cegar( RefinementTree< IntervalT >& rtree
+										 , const typename RefinementTree< IntervalT >::EnclosureT& initialSet
+										 , const Ariadne::Effort& effort
+										 , const IRefinementStrategy< IntervalT >& refinementStrat
+										 , const uint maxNodes )
 {
     class NodeComparator;
     typedef RefinementTree< IntervalT > Rtree;
@@ -236,7 +237,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	if( counterexample.empty() )
 	{
 	    std::cout << "no counterexample found" << std::endl;
-	    return std::vector< typename Rtree::NodeT >();
+	    return std::make_pair( true, std::vector< typename Rtree::NodeT >() );
 	}
 
 	std::cout << "found counterexample " << std::endl;
@@ -260,7 +261,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
 	    std::cout << "non spurious counterexample found" << std::endl;
-	    return counterexample;
+	    return std::make_pair( false, counterexample );
 	}
 	else if( !definitelyNotSpurious )
 	    std::cout << "it's spurious" << std::endl;
@@ -314,7 +315,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > cegar( RefinementTree
 
 	std::cout << "cegar iteration done " << std::endl;
     }
-    return {};
+    return make_pair( Ariadne::ValidatedKleenean( Ariadne::indeterminate ), std::vector< typename Rtree::NodeT >() );
 }
 
 #endif
