@@ -25,6 +25,12 @@ struct OnlyOnceRunner : public ITestRunner
     virtual bool run( ITest* pTest ) const;
 };
 
+//! \class carries out required number of repetitions; calls iterate, then check only once (because there's no state to modify in the test itself
+struct StatelessRunner : public ITestRunner
+{
+    virtual bool run( ITest* pTest ) const;
+};
+
 //! \class carries out required number of repetitions; sequence per repetition: initialize then iterate according to test size and finally check once
 struct ContinuousRunner : public ITestRunner
 {

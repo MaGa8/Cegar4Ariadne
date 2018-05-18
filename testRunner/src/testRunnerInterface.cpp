@@ -7,6 +7,17 @@ bool OnlyOnceRunner::run( ITest* pTest ) const
     return pTest->check();
 }
 
+bool StatelessRunner::run( ITest* pTest ) const
+{
+    for( uint cRep = 0; cRep < pTest->mRepetitions; ++cRep )
+    {
+	pTest->iterate();
+	if( !pTest->check() )
+	    return false;
+    }
+    return true;
+}
+
 bool ContinuousRunner::run( ITest* pTest ) const
 {
     for( uint cRep = 0; cRep < pTest->mRepetitions; ++cRep )
