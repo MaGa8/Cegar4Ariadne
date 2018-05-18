@@ -35,7 +35,10 @@
 # Temporaries
 *~
 \#*\#
+.\#*
 
 # Logs
 *.log
 
+# Octave scripts for trying things out
+*.m

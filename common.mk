@@ -35,11 +35,19 @@ LOCAL_SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp) )
 LOCAL_OBJECTS = $(LOCAL_SOURCES:%.cpp=%.o)
 LOCAL_DEPS = $(LOCAL_SOURCES:%.cpp=%.d)
 
-GLOBAL_MAINS = $(shell find $(ROOTDIR)/ -name "run*.cpp")
+GLOBAL_MAINS = $(wildcard $(SRCDIR)/run*.cpp) $(shell find $(ROOTDIR)/ -name "run*.cpp")
 GLOBAL_SOURCES = $(filter-out $(GLOBAL_MAINS),$(wildcard $(SRCDIR)/*.cpp) $(foreach mod,$(MODULES),$(wildcard $(mod)/$(SRCDIR)/*.cpp)))
 GLOBAL_OBJECTS = $(subst $(SRCDIR),$(OBJDIR),$(GLOBAL_SOURCES:%.cpp=%.o))
 
 #MAKEFLAGS += --no-builtin-rules
+
+define makeDependencies =
+$(foreach mod,$(MODULES), echo $(PWD) && cd $(mod) && make depend && make build && cd $(PWD) &&) echo "made dependencies"
+endef
+
+define makeExecutable =
+$(CXX) $(LINK_FLAGS) -o $(BINDIR)/$1 $(filter-out $(OBJDIR)/$1.o,$(GLOBAL_OBJECTS)) $(OBJDIR)/$1.o
+endef
 
 .PHONY: all
 all: 	check depend
@@ -63,7 +71,7 @@ depend: $(LOCAL_DEPS)
 build: 	check $(LOCAL_OBJECTS)
 	find ./ -maxdepth 1 -name "*.o" -exec mv \{\} $(OBJDIR)/ \;
 ifdef TARGET
-		$(CXX) $(LINK_FLAGS) -o $(BINDIR)/$(TARGET) $(filter-out $(OBJDIR)/$(TARGET).o,$(GLOBAL_OBJECTS)) $(OBJDIR)/$(TARGET).o
+	$(CXX) $(LINK_FLAGS) -o $(BINDIR)/$(TARGET) $(filter-out $(OBJDIR)/$(TARGET).o,$(GLOBAL_OBJECTS)) $(OBJDIR)/$(TARGET).o
 endif
 
 .PHONY: check
