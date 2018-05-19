@@ -2,7 +2,7 @@
 
 int main()
 {
-    AdjacencyDiGraphTest t( 50, 1000 );
+    AdjacencyDiGraphTest t( 100, 1000 );
     OnlyOnceRunner oor;
     oor.run( &t );
     

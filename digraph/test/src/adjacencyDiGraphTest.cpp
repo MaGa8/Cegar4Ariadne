@@ -425,13 +425,14 @@ void AdjacencyDiGraphTest::init()
     std::shared_ptr< InterleaveRunner > interleave = std::shared_ptr< InterleaveRunner >( new InterleaveRunner() );
     std::shared_ptr< InterleaveRandomRunner > rinterleave = std::shared_ptr< InterleaveRandomRunner >( new InterleaveRandomRunner );
 
-    uint simpleTestSize = 10 * mTestSize;
+    uint simpleTestSize = 5 * mTestSize
+	, advancedSize = 0.5 * mTestSize;
     
     addTest( new AddValueTest( simpleTestSize, mRepetitions ), interleave );
     addTest( new AddEdgeTest( simpleTestSize, mRepetitions ), interleave );
     addTest( new RemoveVertexTest( simpleTestSize, mRepetitions ), rinterleave );
-    addTest( new RemoveVertexNonCorruptionTest( mTestSize, mRepetitions ), rinterleave );
-    addTest( new RemoveVertexIncomingTest( mTestSize, mRepetitions ), rinterleave );
-    addTest( new RemoveVertexOutgoingTest( mTestSize, mRepetitions ), rinterleave );
-    addTest( new RemoveEdgeTest( mTestSize, mRepetitions ), rinterleave );
+    addTest( new RemoveVertexNonCorruptionTest( advancedSize, mRepetitions ), rinterleave );
+    addTest( new RemoveVertexIncomingTest( advancedSize, mRepetitions ), rinterleave );
+    addTest( new RemoveVertexOutgoingTest( advancedSize, mRepetitions ), rinterleave );
+    addTest( new RemoveEdgeTest( advancedSize, mRepetitions ), rinterleave );
 }

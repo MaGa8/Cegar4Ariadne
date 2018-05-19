@@ -251,12 +251,12 @@ GROUP_CTOR( LinkedFixedBranchTreeTest, "linked fixed branch tree" )
 void LinkedFixedBranchTreeTest::init()
 {
     std::shared_ptr< InterleaveRandomRunner > printerleave( new InterleaveRandomRunner() );
-    addTest( new LeafTest( 6 * mTestSize, mRepetitions ), printerleave );
-    addTest( new ExpandSizeTest( 7 * mTestSize, mRepetitions ), printerleave );
-    addTest( new ExpandHeightTest( 7 * mTestSize, mRepetitions ), printerleave );
-    addTest( new RootTest( 7 * mTestSize, mRepetitions ), printerleave );
-    addTest( new NotRootTest( 6 * mTestSize, mRepetitions ), printerleave );
-    addTest( new DeleteTest( 1.25 * mTestSize, mRepetitions ), printerleave );
-    addTest( new DeleteSizeTest( mTestSize, mRepetitions ), printerleave );
-    addTest( new DeleteHeightTest( 1.7 * mTestSize, mRepetitions ), printerleave );
+    addTest( new LeafTest( 3 * mTestSize, mRepetitions ), printerleave );
+    addTest( new ExpandSizeTest( 3 * mTestSize, mRepetitions ), printerleave );
+    addTest( new ExpandHeightTest( 3 * mTestSize, mRepetitions ), printerleave );
+    addTest( new RootTest( 3 * mTestSize, mRepetitions ), printerleave );
+    addTest( new NotRootTest( 3 * mTestSize, mRepetitions ), printerleave );
+    addTest( new DeleteTest( 0.6 * mTestSize, mRepetitions ), printerleave );
+    addTest( new DeleteSizeTest( 0.5 * mTestSize, mRepetitions ), printerleave );
+    addTest( new DeleteHeightTest( 0.8 * mTestSize, mRepetitions ), printerleave );
 }

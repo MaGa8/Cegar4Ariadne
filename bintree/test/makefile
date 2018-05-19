@@ -1,6 +1,6 @@
 ROOTDIR = ../..
 MODULES = $(TEST_RUNNER_DIR) $(TREE_DIR)
-TARGET = linkedFixedBranchTreeTest
+TARGET = runLinkedFixedBranchTreeTest
 
 OPTFLAGS += -std=c++17 -g -Wall
 

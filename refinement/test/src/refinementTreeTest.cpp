@@ -483,12 +483,12 @@ void RefinementTreeTest::init()
     std::shared_ptr< ContinuousRandomRunner > pRcontinuous( new ContinuousRandomRunner() );
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
-    addTest( new ExpansionTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new LeavesTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new ImageTest( mTestSize, mRepetitions ), pRcontinuous );
-    addTest( new NonLeafRemovalTest( mTestSize, mRepetitions ), pRcontinuous );
-    addTest( new PreimageTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new PostimageTest( mTestSize, mRepetitions ), pRinterleave );
-    addTest( new AlwaysUnsafeTest( mTestSize, mRepetitions ), pRinterleave );
+    addTest( new ExpansionTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new LeavesTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new ImageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new NonLeafRemovalTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new PreimageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new PostimageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new AlwaysUnsafeTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     // addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
 }

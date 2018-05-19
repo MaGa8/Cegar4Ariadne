@@ -3,6 +3,8 @@
 
 #include "linkedFixedBranchTreeTest.hpp"
 #include "adjacencyDiGraphTest.hpp"
+#include "refinementTreeTest.hpp"
+#include "cegarTest.hpp"
 
 struct AllTests : public ITestGroup
 {

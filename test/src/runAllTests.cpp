@@ -3,6 +3,6 @@
 int main()
 {
     OnlyOnceRunner poor;
-    AllTests allTests( 25, 1000 );
+    AllTests allTests( 100, 1000 );
     poor.run( &allTests );
 }

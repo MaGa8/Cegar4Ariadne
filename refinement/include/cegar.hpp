@@ -230,27 +230,27 @@ std::pair< Ariadne::ValidatedKleenean
     
     while( rtree.tree().size() < maxNodes )
     {
-	std::cout << "new iteration, number of nodes " << rtree.tree().size() << "/" << maxNodes << std::endl;
+	// std::cout << "new iteration, number of nodes " << rtree.tree().size() << "/" << maxNodes << std::endl;
 
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 	if( counterexample.empty() )
 	{
-	    std::cout << "no counterexample found" << std::endl;
+	    // std::cout << "no counterexample found" << std::endl;
 	    return std::make_pair( true, std::vector< typename Rtree::NodeT >() );
 	}
 
-	std::cout << "found counterexample " << std::endl;
-	for( auto trajNode : counterexample )
-	{
-	    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otrajValue = rtree.nodeValue( trajNode );
-	    if( otrajValue )
-		std::cout << otrajValue.value().get().getEnclosure();
-	    else
-		std::cout << "[unsafe]";
-	    std::cout << "  ->  ";
-	}
-	std::cout << std::endl;
+	// std::cout << "found counterexample " << std::endl;
+	// for( auto trajNode : counterexample )
+	// {
+	//     std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otrajValue = rtree.nodeValue( trajNode );
+	//     if( otrajValue )
+	// 	std::cout << otrajValue.value().get().getEnclosure();
+	//     else
+	// 	std::cout << "[unsafe]";
+	//     std::cout << "  ->  ";
+	// }
+	// std::cout << std::endl;
 
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
@@ -260,25 +260,25 @@ std::pair< Ariadne::ValidatedKleenean
 	
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
-	    std::cout << "non spurious counterexample found" << std::endl;
+	    // std::cout << "non spurious counterexample found" << std::endl;
 	    return std::make_pair( false, counterexample );
 	}
-	else if( !definitelyNotSpurious )
-	    std::cout << "it's spurious" << std::endl;
-	else
-	    std::cout << "terminal node is not completely unsafe" << std::endl;
+	// else if( !definitelyNotSpurious )
+	//     std::cout << "it's spurious" << std::endl;
+	// else
+	//     std::cout << "terminal node is not completely unsafe" << std::endl;
 
 	// want to refine last state as well
-	std::cout << "collecting image in refined tree" << std::endl;
+	// std::cout << "collecting image in refined tree" << std::endl;
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
 	    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oref = rtree.nodeValue( counterexample[ i ] );
-	    std::cout << "refining box ";
-	    if( oref )
-		std::cout << oref.value().get().getEnclosure();
-	    else
-		std::cout << "[unsafe]";
-	    std::cout << std::endl;
+	    // std::cout << "refining box ";
+	    // if( oref )
+	    // 	std::cout << oref.value().get().getEnclosure();
+	    // else
+	    // 	std::cout << "[unsafe]";
+	    // std::cout << std::endl;
 
 	    if( oref )
 	    {
@@ -313,7 +313,7 @@ std::pair< Ariadne::ValidatedKleenean
 	// }
 	// initialImage = std::move( newInitialImage );
 
-	std::cout << "cegar iteration done " << std::endl;
+	// std::cout << "cegar iteration done " << std::endl;
     }
     return make_pair( Ariadne::ValidatedKleenean( Ariadne::indeterminate ), std::vector< typename Rtree::NodeT >() );
 }

@@ -7,4 +7,6 @@ void AllTests::init()
     std::shared_ptr< OnlyOnceRunner > poor( new OnlyOnceRunner() );
     addTest( new LinkedFixedBranchTreeTest( mTestSize, mRepetitions ), poor );
     addTest( new AdjacencyDiGraphTest( mTestSize, mRepetitions ), poor );
+    addTest( new RefinementTreeTest( mTestSize, mRepetitions ), poor );
+    addTest( new CegarTest( mTestSize, mRepetitions ), poor );
 }

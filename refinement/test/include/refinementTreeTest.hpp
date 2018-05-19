@@ -180,3 +180,4 @@ struct RefinementTreeTest : public ITestGroup
 };
 
 #endif
+

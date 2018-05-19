@@ -3,6 +3,6 @@
 int main()
 {
     std::shared_ptr< OnlyOnceRunner > oor( new OnlyOnceRunner() );
-    oor->run( new RefinementTreeTest( 50, 100 ) );
+    oor->run( new RefinementTreeTest( 100, 1000 ) );
     return 0;
 }
