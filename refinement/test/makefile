@@ -18,3 +18,7 @@ cegar: check depend
 	$(makeDependencies)
 	make build
 	$(call makeExecutable,runCegarTest)
+
+.PHONY: test
+test:
+	@echo $(LOCAL_DEPS)

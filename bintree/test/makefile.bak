@@ -1,0 +1,10 @@
+ROOTDIR = ../..
+MODULES = $(TEST_RUNNER_DIR) $(TREE_DIR)
+TARGET = runLinkedFixedBranchTreeTest
+
+OPTFLAGS += -std=c++17 -g -Wall
+
+include $(ROOTDIR)/common.mk
+
+test:
+	@cat $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(LOCAL_SOURCES))))
