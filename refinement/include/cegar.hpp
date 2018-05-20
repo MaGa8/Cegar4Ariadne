@@ -3,6 +3,8 @@
 
 #include "refinementTree.hpp"
 
+#include <functional>
+
 /*!
   runs DFS to find counterexample
   any path terminates in
@@ -11,8 +13,6 @@
   \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< IntervalT >::NodeT
   \return vector of nodes terminated by a possibly unsafe node
   \todo add parameter to control ordering of branches in dfs exploration 
-  \todo speed up: use references in vector storing path passed to recursive calls -> don't need to copy nodes
-  \todo use const refinement tree once constness issues in tree+graph are fixed
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
 template< typename IntervalT, typename NodeIterT >
@@ -23,43 +23,23 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
     typedef RefinementTree< IntervalT > Rtree;
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
     {
-	// std::cout << "looking for counterex at " << rtree.nodeValue( *iImgBegin ).getEnclosure()
-	// << " which is " << rtree.nodeValue( *iImgBegin ).isSafe() << " safe " << std::endl;
-
-	// counterexample found
-	// image should never contain always-unsafe-node --> that assumption is wrong!
-	std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oImg = rtree.nodeValue( *iImgBegin );
-	if( !definitely( rtree.isSafe( *iImgBegin ) ) )
+	auto iLoop = std::find_if( path.begin(), path.end()
+				   , std::bind( &RefinementTree< IntervalT >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
+	if( iLoop == path.end() )
 	{
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
-	    // std::cout << "counterexample of length " << copyPath.size() << std::endl;
-	    return copyPath;
-	}
+	    // counterexample found (could not happen if node was visited before)
+	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
+		return copyPath;
 
-	// look for loop										       
-	typename std::vector< typename RefinementTree< IntervalT >::NodeT >::const_iterator iBeginLoop =
-	    std::find_if( path.begin(), path.end()
-			  , [&rtree, &iImgBegin] (const typename RefinementTree< IntervalT >::NodeT& n) {
-			      std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > on = rtree.nodeValue( n );
-			      if( !on )          // image is valid, otherwise would have returned 
-				  return false;
-			      return on.value().get() == rtree.nodeValue( *iImgBegin ).value().get(); } );
-	// no loop found
-	if( iBeginLoop == path.end() )
-	{
-	    // std::cout << "no loop, recurse!" << std::endl;
 	    // recurse & return
-	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
-	    copyPath.push_back( *iImgBegin );
 	    auto posts =  rtree.postimage( *iImgBegin );
 	    std::vector< typename RefinementTree< IntervalT >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
 	    if( !cex.empty() )
 		return cex;
 	}
     }
-    // no counterexample found
-    // std::cout << "nothing found, go home now" << std::endl;
     return {};
 }
 
@@ -108,12 +88,8 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
     for( ; beginCounter != endCounter - 1; ++beginCounter )
     {
 	std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oNext = rtree.nodeValue( *(beginCounter + 1) );
-	// if( !oNext )     // always unsafe node is terminal, yes, but I'm here to check that it's reachable
-	// return false;
 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPoint = rtree.dynamics().evaluate( currPoint );
 	Ariadne::ValidatedKleenean containsMapped;
-
-	// std::cout << currPoint << "  to  " << mappedPoint << std::endl;
 
 	if( oNext )
 	{
@@ -122,49 +98,12 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 	}
 	else
 	    containsMapped = !rtEnc.contains( mappedPoint );
-	// this is nonsense! should map centre of current box
 	if( definitely( !containsMapped ) )
-	{
-	    // std::cout << mappedPoint << " is inside " << oNext << "?" << std::endl;
 	    return true; // should be indeterminate
-	}
 	
 	currPoint = mappedPoint;
     }
     return false;
-    
-    
-    // // intersect image with first element of counterex trajectory -> new image -> recurse
-    // std::vector< typename RefinementTree< IntervalT >::NodeT > mappedImage;
-    // for( ; beginImage != endImage; ++beginImage )
-    // {
-    // 	auto imagePosts = rtree.postimage( *beginImage );
-    // 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedCenter = rtree.dynamics().evaluate( rtree.nodeValue( *beginImage ).getEnclosure().centre() );
-    // 	auto ipost = imagePosts.begin();
-    // 	while( ipost != imagePosts.end() &&
-    // 	       !possibly( rtree.nodeValue( *ipost ).getEnclosure().contains( mappedCenter ) ) )
-    // 	    ++ipost;
-	
-    // 	// replaced in while loop above
-    // 	// Ariadne::ValidatedLowerKleenean doesMap = trgBox.contains( mappedCentre );
-
-    // 	// certainly cannot trace any given set -> certainly spurious
-    // 	if( ipost == imagePosts.end() )
-    // 	    return true;
-
-    // 	Ariadne::ValidatedUpperKleenean continueSpurious = true; // should be indeterminate
-    // 	if( beginCounter != endCounter )
-    // 	    continueSpurious = isSpurious( rtree, beginCounter + 1, endCounter, ipost, ipost + 1, effort ); // ipost is not end, so can do +1
-
-    // 	DO NOT HANDLE OTHER CASE: CURRENT BOX IS COMPLETELY UNSAFE -> this should be the last one
-
-    // 	// can surely trace some set -> certainly not spurious
-    // 	// READ THIS! \todo should add condition: unsafe node needs to be separate from safe set
-    // 	if( definitely( !continueSpurious ) )
-    // 	    return false;
-    // }
-    // // neither found instance to prove nor could disprove that the counterexample was spurious
-    // return true; // should be indeterminate
 }
 
 // can only prove that there exists a true counterexample -> system is unsafe
@@ -230,27 +169,12 @@ std::pair< Ariadne::ValidatedKleenean
     
     while( rtree.tree().size() < maxNodes )
     {
-	// std::cout << "new iteration, number of nodes " << rtree.tree().size() << "/" << maxNodes << std::endl;
-
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 	if( counterexample.empty() )
 	{
-	    // std::cout << "no counterexample found" << std::endl;
 	    return std::make_pair( true, std::vector< typename Rtree::NodeT >() );
 	}
-
-	// std::cout << "found counterexample " << std::endl;
-	// for( auto trajNode : counterexample )
-	// {
-	//     std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otrajValue = rtree.nodeValue( trajNode );
-	//     if( otrajValue )
-	// 	std::cout << otrajValue.value().get().getEnclosure();
-	//     else
-	// 	std::cout << "[unsafe]";
-	//     std::cout << "  ->  ";
-	// }
-	// std::cout << std::endl;
 
 	bool definitelyNotSpurious = definitely( !isSpurious( rtree
 							      , counterexample.begin(), counterexample.end()
@@ -260,26 +184,12 @@ std::pair< Ariadne::ValidatedKleenean
 	
 	if( definitelyNotSpurious && definitelyUnsafe )
 	{
-	    // std::cout << "non spurious counterexample found" << std::endl;
 	    return std::make_pair( false, counterexample );
 	}
-	// else if( !definitelyNotSpurious )
-	//     std::cout << "it's spurious" << std::endl;
-	// else
-	//     std::cout << "terminal node is not completely unsafe" << std::endl;
 
-	// want to refine last state as well
-	// std::cout << "collecting image in refined tree" << std::endl;
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
 	    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oref = rtree.nodeValue( counterexample[ i ] );
-	    // std::cout << "refining box ";
-	    // if( oref )
-	    // 	std::cout << oref.value().get().getEnclosure();
-	    // else
-	    // 	std::cout << "[unsafe]";
-	    // std::cout << std::endl;
-
 	    if( oref )
 	    {
 		const IGraphValue& graphValRef = *graph::value( rtree.leafMapping(), counterexample[ i ] ); // dont use this after refinement
@@ -291,29 +201,13 @@ std::pair< Ariadne::ValidatedKleenean
 		    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > treeValInitial = rtree.nodeValue( initial );
 		    if( treeValInitial )
 		    {
-			// use shortcut later
 			auto refinedImg = rtree.image( initialSet, treeNodeRef );
-			// surely works
-			// auto refinedImg = rtree.image( itvInitial.value().get().getEnclosure() );
 			initialImage.insert( refinedImg.begin(), refinedImg.end() );
 		    }
 		}
 		initialImage.erase( counterexample[ i ] );
 	    }
 	}
-
-	// \todo test against this code
-	// replaced by code in for loop over counterexs above
-	// NodeSet newInitialImage = NodeSet( NodeComparator( rtree ) );
-	// for( const typename Rtree::NodeT& prevImage : initialImage )
-	// {
-	//     auto imageNow = rtree.image( rtree.nodeValue( prevImage ).getEnclosure() );
-	    
-	//     newInitialImage.insert( imageNow.begin(), imageNow.end() );
-	// }
-	// initialImage = std::move( newInitialImage );
-
-	// std::cout << "cegar iteration done " << std::endl;
     }
     return make_pair( Ariadne::ValidatedKleenean( Ariadne::indeterminate ), std::vector< typename Rtree::NodeT >() );
 }

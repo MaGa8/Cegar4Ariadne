@@ -378,7 +378,7 @@ void RefinementTreeTest::AlwaysUnsafeTest::init()
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
     // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 9 );
+    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
     Ariadne::EffectiveConstraintSet cs = { c1 };
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
@@ -423,58 +423,6 @@ bool RefinementTreeTest::AlwaysUnsafeTest::check() const
     return true;
 }
 
-// RefinementTreeTest::TEST_CTOR( PositiveCounterexampleTest, "test whether counterexample can be found" );
-
-// void RefinementTreeTest::PositiveCounterexampleTest::iterate() {}
-
-// bool RefinementTreeTest::PositiveCounterexampleTest::check() const
-// {
-//     /*
-//       l = nonSafetyLevel, c = constraintBoundary
-//       need: 1 - 1 / 2^x + (1 + c) - (1 + c) / 2^x > l
-//       => - (2 + c) / 2^x > l - 2 - c
-//       => - (2 + c) / (l - 2 - c) > 2^x
-//       => x > log2( (2 + c) / (2 + c - l) )
-//       in one dimension, so assuming equal number of splits along each dimension, multiply by 2
-//     */
-//     const double constraintBoundary = 2;
-//     const uint refinementDepth = 8;
-//     Ariadne::Effort effort( 5 );
-    
-//     D( std::cout << "preimage test init" << std::endl; );
-//     Ariadne::ExactBoxType rootBox( { {0,1}, {0,3} } )
-// 	, initialBox( { {0,0.75}, {0,1.25} } );
-//     // need refinement tree with non-static dynamics
-//     Ariadne::RealVariable x( "x" ), y( "y" );
-//     Ariadne::Space< Ariadne::Real > fspace = {x, y};
-//     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( fspace, {x * x, y * y} );
-
-//     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-// 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-//     Ariadne::EffectiveConstraint c1 = ( (a + b) <= constraintBoundary );
-//     Ariadne::EffectiveConstraintSet cs = {c1};
-
-//     ExactRefinementTree rtree( rootBox, cs, f, effort );
-
-//     // refine range (0,1.1) to less than 0.1, so 1.1 / 2^x <= 0.1
-//     std::cout << "need to refine " << refinementDepth << " levels " << std::endl;
-//     refineEqualDepth( rtree, refinementDepth );
-
-//     // root box is initial state
-//     std::vector< typename ExactRefinementTree::NodeT > initImage = rtree.image( initialBox );
-//     auto cexPath = findCounterexample( rtree, initImage.begin(), initImage.end() );
-
-//     std::cout << "is counterexample spurious? "
-// 	      << isSpurious( rtree, cexPath.begin(), cexPath.end(), initImage.begin(), initImage.end(), effort )
-// 	      << std::endl;
-
-//     if( cexPath.empty() )
-// 	return false;
-    
-//     return true;
-// }
-
-
 RefinementTreeTest::GROUP_CTOR( RefinementTreeTest, "refinement tree" );
 
 void RefinementTreeTest::init()
@@ -483,12 +431,11 @@ void RefinementTreeTest::init()
     std::shared_ptr< ContinuousRandomRunner > pRcontinuous( new ContinuousRandomRunner() );
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
-    addTest( new ExpansionTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new LeavesTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new ImageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    addTest( new NonLeafRemovalTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    addTest( new PreimageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new PostimageTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new AlwaysUnsafeTest( 0.1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new PositiveCounterexampleTest( mTestSize, mRepetitions ), pOnce );
+    addTest( new ExpansionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new LeavesTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new ImageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new NonLeafRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new AlwaysUnsafeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );    
 }

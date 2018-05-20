@@ -227,10 +227,22 @@ class RefinementTree
 	return postimg;
     }
 
+    //! \return true if trg can be reached from src
+    //! \note nothing can be reached from the outside node
+    Ariadne::ValidatedUpperKleenean isReachable( const NodeT& src, const NodeT& trg )
+    {
+	auto optSrcVal = nodeValue( src );
+	if( optSrcVal )
+	    isReachable( optSrcVal.value().get().getEnclosure(), trg );
+	else
+	    return false;
+    }
+    
     //! \return true if trg is deemed reachable from srcVal
     //! \note if always unsafe node is passed as second argument, it is reachable iff srcVal maps outside the initial abstraction
     // \todo eventually parametrize this
     // \todo does this always return a validated Kleenean? test with effective boxes at some point
+    // \todo remove this one eventually
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue< EnclosureT >& srcVal, const NodeT& trg ) const
     {
 	const EnclosureT& srcBox = srcVal.getEnclosure();
@@ -256,6 +268,17 @@ class RefinementTree
 	}
     }
 
+    //! \return true if nodes are equal based on their identifiers, false otherwise
+    bool equal( const NodeT& n1, const NodeT& n2 )
+    {
+	auto val1 = nodeValue( n1 ), val2 = nodeValue( n2 );
+	if( val1 && val2 )
+	    val1.value().get() == val2.value().get();
+	else if( !val1 && !val2 )
+	    return true;
+	else false;
+    }
+
     /*! 
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
@@ -269,12 +292,6 @@ class RefinementTree
 	
 	InsideGraphValue< typename RefinementT::NodeT >& inGval = static_cast< InsideGraphValue< typename RefinementT::NodeT >& >( *gval );
     	typename RefinementT::NodeT treev = inGval.treeNode();
-	// interior node is already refined - THIS TEST IS WRONG! leaves are to be refined!
-	// if( tree::isLeaf( mRefinements, treev ) )
-	//     return;
-	
-    	// if v is leaf:
-    	// obtain refinements of node v as list of appropriate length
     	EnclosureT obox = tree::value( mRefinements, treev )->getEnclosure();
 	// make new tree values
     	std::vector< EnclosureT > refined = r.refine( obox );
@@ -294,61 +311,10 @@ class RefinementTree
 	    typename RefinementT::NodeT refd = *cs.first;
 	    refinedNodes.push_back( addToGraph( refd ) );
 	}
-	
-    	// add edges
-	//! \todo see whether it's worthwhile to use InsideGraphValue< typename RefinementT::NodeT >s directly instead of relying on pre- and postimage to do the job
-	std::vector< NodeT > pres( preimage( v ) );
-	std::vector< NodeT > posts( postimage( v ) );
-	// append all children of refined node, because center mapping refinements may introduce new links absent at parent level
-	// simply adding v is fine, because pres and posts will be traced down to leaf
-	pres.push_back( v );
-	posts.push_back( v );
-	
-    	for( NodeT& refined : refinedNodes )
-    	{
-    	    // determine which elements of the preimage of v map to which refined component
-    	    for( NodeT& pre : pres )
-    	    {
-    		for( NodeT& preLeaf : leaves( pre ) )
-    		{
-		    const InteriorTreeValue< EnclosureT >& preVal = nodeValue( preLeaf ).value(); // obtained as leaf, so should have value
-    		    if( possibly( isReachable( preVal, refined ) ) )
-			graph::addEdge( mMappings, preLeaf, refined );
-    		}
-    	    }
 
-    	    // determine which elements of the postimage the components of v map to
-	    const InteriorTreeValue< EnclosureT >& refinedVal = nodeValue( refined ).value(); // refined node is also in tree
-    	    for( NodeT& post : posts )
-    	    {
-		// outside value has no leaves
-		if( !graph::value( mMappings, post )->isInside() && possibly( isReachable( refinedVal, post ) ) )
-		    graph::addEdge( mMappings, refined, post );
-		
-    		for( NodeT& postLeaf : leaves( post ) )
-    		{
-		    if( possibly( isReachable( refinedVal, postLeaf ) ) )
-			graph::addEdge( mMappings, refined, postLeaf );
-    		}
-    	    }
-    	}
-
-	// <--- inefficient alternative below
-	// to bring this back to life: map whole box and test image as intersection
-
-	// auto lvs = leaves( tree::root( mRefinements ) );
-	// for( NodeT& refined : refinedNodes )
-	// {
-	//     for( NodeT& lf : lvs )
-	//     {
-	// 	if( possibly( isReachable( lf, refined ) ) )
-	// 	    graph::addEdge( mMappings, lf, refined );
-	// 	if( possibly( isReachable( refined, lf ) ) )
-	// 	    graph::addEdge( mMappings, refined, lf );
-	//     }
-	// }
-	
-	// unlink v from the graph
+	for( NodeT& refined : refinedNodes )
+	    refineEdges( v, refined );
+	// unlink v from the graph after its connectivity is no longer needed
 	removeFromGraph( v );
     }
 
@@ -401,6 +367,47 @@ class RefinementTree
 				  : (definitely( constraints().separated( enc ).check( mEffort ) )
 				     ? Ariadne::ValidatedKleenean( false )
 				     : Ariadne::indeterminate) );
+    }
+
+    //! \note adapts edges of parent node after refinement
+    void refineEdges( NodeT& parent, NodeT& child )
+    {
+	// add edges
+	std::vector< NodeT > pres( preimage( parent ) );
+	std::vector< NodeT > posts( postimage( parent ) );
+	// simply adding v is fine, because pres and posts will be traced down to leaf
+	// but parent will be in pre and postimage if it has a self loop, otherwise irrelevant - I think...
+	// pres.push_back( v );
+	// posts.push_back( v );
+	
+	for( NodeT& pre : pres )
+	    connectAllLeaves( pre, child );
+
+	for( NodeT& post : posts )
+	    connectAllLeaves( child, post ); 
+    }
+
+    //! \brief adds links from all leaves in subtree at src to all leaves in subtree at trg that are reachable
+    void connectAllLeaves( NodeT& src, NodeT& trg )
+    {
+	// auto srcVal = nodeValue( src ), trgVal = nodeValue( trg );
+
+	std::vector< NodeT > srcLeavesOrOutside = leaves( src )
+	    , trgLeavesOrOutside = leaves( trg );
+	// outside has no leaves
+	if( !graph::value( leafMapping(), src )->isInside() )
+	    srcLeavesOrOutside.push_back( src );
+	if( !graph::value( leafMapping(), trg )->isInside() )
+	    trgLeavesOrOutside.push_back( trg );
+
+	for( NodeT& srcLeaf : srcLeavesOrOutside )
+	{
+	    for( NodeT& trgLeaf : trgLeavesOrOutside )
+	    {
+		if( possibly( isReachable( srcLeaf, trgLeaf ) ) )
+		    graph::addEdge( mMappings, srcLeaf, trgLeaf );
+	    }
+	}
     }
     
     //! \brief add interior vertex to graph and ensure that tn holds the vertex
