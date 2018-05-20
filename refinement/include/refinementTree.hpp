@@ -145,6 +145,8 @@ class RefinementTree
     //! \return the always unsafe node used
     const NodeT& outside() const { return mOutsideNode; }
 
+    const EnclosureT& initialEnclosure() const { return tree::value( tree(), tree::root( tree() ) )->getEnclosure(); }
+
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from, including outside node
     template< typename EnclosureT2 >
@@ -265,6 +267,28 @@ class RefinementTree
 	    const EnclosureT& initialRefEnc = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
 	    Ariadne::ValidatedLowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, ubMapped ) == src;
 	    return !intersectionEqual;
+	}
+    }
+
+    //! \return True if enclosure represented by n relates to space s, false if it does not and indeterminate otherwise. If n in a node inside the initial abstraction, the relation cannot be falisified. If n is an outside node then the relation cannot be affirmed
+    template< typename SpaceT >
+    Ariadne::ValidatedKleenean relates( const NodeT& n, const SpaceT& s
+					, const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& p ) const
+    {
+	auto val = nodeValue( n );
+	if( val )
+	{
+	    if( definitely( p( val.value().get().getEnclosure(), s ) ) )
+		return true;
+	    else
+		return Ariadne::indeterminate;
+	}
+	else
+	{
+	    if( possibly( !p( initialEnclosure(), s ) ) )
+		return Ariadne::indeterminate;
+	    else
+		return false;
 	}
     }
 

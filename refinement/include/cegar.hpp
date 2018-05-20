@@ -5,6 +5,28 @@
 
 #include <functional>
 
+class NodeComparator
+{
+  public:
+    NodeComparator( const Rtree& rtree ) : mRtree( rtree ) {}
+		       
+    bool operator ()( const typename Rtree::NodeT& n1
+		      , const typename Rtree::NodeT& n2 ) const
+    {
+	std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otval1 = mRtree.get().nodeValue( n1 )
+	    , otval2 = mRtree.get().nodeValue( n2 );
+	// always unsafe node is always equal to always unsafe node
+	if( !otval1 && !otval2 )
+	    return true;
+	if( !otval1 || !otval2 )
+	    return false;
+	return otval1.value().get().id() < otval2.value().get().id();
+    }
+
+  private:
+    std::reference_wrapper< const Rtree > mRtree;
+};
+
 /*!
   runs DFS to find counterexample
   any path terminates in
@@ -43,6 +65,27 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
     return {};
 }
 
+/*! 
+  \param ibegin iterator over sequence of refinement tree nodes
+  \return iterator to node pt lies in, according to eval
+*/
+template< typename IntervalT, typename NumberT, typename NodeIterT >
+NodeIterT findContaining( const RefinementTree< IntervalT >& rtree, const Ariadne::Point< NumberT > pt
+			  , NodeIterT ibegin, const NodeIterT& iend
+			  , const std::function< bool( const Ariadne::ValidatedKleenean& ) >& eval )
+{
+    // center is not contained in initial image
+    return std::find_if( ibegin, iend
+			 ,[&] ( const typename RefinementTree< IntervalT >::NodeT& n )
+			 {
+			     auto val = rtree.nodeValue( n );
+			     if( !val )
+				 return false;			  
+			     return eval( val.value().get().getEnclosure().contains( pt ) );
+			 } );
+}
+
+
 // implement this using lower kleenean?
 /*! 
   \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< IntervalT >::NodeT
@@ -61,46 +104,41 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
 {
     typedef RefinementTree< IntervalT > Rtree;
     
+    // determine: initial set and first state of counterexample intersect
     std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oBeginCex = rtree.nodeValue( *beginCounter );
-    // always unsafe node is terminal state because it is unsafe
-    // need this check, because first node in counterexample might be always unsafe
+
     if( !oBeginCex )
-	return false;
-    // one or less nodes in counterexample
-    if( beginCounter + 1 >= endCounter )
-	return false;
-    // center is not contained in initial image
-    if( std::none_of( beginImage, endImage,
-		      [&rtree, &oBeginCex, &effort] ( const typename Rtree::NodeT& imgNode )
-		      {
-			  const typename Rtree::EnclosureT& startCexEnc = oBeginCex.value().get().getEnclosure();
-			  std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oImg = rtree.nodeValue( imgNode );
-			  if( !oImg )
-			      return false;			  
-			  Ariadne::Kleenean contained = possibly( oImg.value().get().getEnclosure().contains( startCexEnc.centre() ) );
-			  return possibly( contained.check( effort ) );
-		      } ) )
-	return true;
-	
-    Ariadne::Box< IntervalT > currBox = oBeginCex.value().get().getEnclosure();
-    Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > currPoint = currBox.centre();
-    const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
-    for( ; beginCounter != endCounter - 1; ++beginCounter )
     {
-	std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oNext = rtree.nodeValue( *(beginCounter + 1) );
+	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const typename Rtree::EnclosureT& ) > notCovers = [] (auto& nodeEnc, auto& initialEnc ) {
+	    return Ariadne::intersection( initialEnc, nodeEnc ) != nodeEnc; };
+	if( std::any_of( beginImage, endImage, [&rtree, &notCovers] (const typename Rtree::NodeT& n) {
+		    return possibly( rtree.relates( n, rtree.initialEnclosure(), notCovers ) ); } ) ) 
+	    return false;
+	else
+	    return true;
+    }
+
+    Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > currPoint = oBeginCex.value().get().getEnclosure().centre();
+    std::function< bool( const typename Rtree::NodeT& ) > contains2 = [&currPoint, &rtree] (auto& n) {
+	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > >& ) > contains =
+	  [] (auto& enc, auto& pt ) { return enc.contains( pt ); };
+	return possibly( rtree.relates( n, currPoint, contains ) ); };
+    if( std::none_of( beginImage, endImage, contains2 ) )
+	return true;
+    //map forward
+    const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
+    for( PathIterT nextCounter = beginCounter + 1; nextCounter != endCounter; beginCounter = nextCounter++ )
+    {
+	auto oNext = rtree.nodeValue( *nextCounter );
 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPoint = rtree.dynamics().evaluate( currPoint );
 	Ariadne::ValidatedKleenean containsMapped;
 
 	if( oNext )
-	{
-	    Ariadne::Box< IntervalT > nextBox = oNext.value().get().getEnclosure();
-	    containsMapped = nextBox.contains( mappedPoint );
-	}
+	    containsMapped = oNext.value().get().getEnclosure().contains( mappedPoint );
 	else
 	    containsMapped = !rtEnc.contains( mappedPoint );
 	if( definitely( !containsMapped ) )
 	    return true; // should be indeterminate
-	
 	currPoint = mappedPoint;
     }
     return false;
@@ -133,34 +171,6 @@ std::pair< Ariadne::ValidatedKleenean
     typedef RefinementTree< IntervalT > Rtree;
     typedef std::set< typename Rtree::NodeT, NodeComparator > NodeSet;
 
-    class NodeComparator
-    {
-      public:
-	NodeComparator( const Rtree& rtree ) : mRtree( rtree ) {}
-		       
-	// NodeComparator( const NodeComparator& orig ) : mRtree( orig.mRtree ) {}
-
-	// NodeComparator& operator =( const NodeComparator& orig ) { mRtree = orig.mRtree; return *this; }
-
-	bool operator ()( const typename Rtree::NodeT& n1
-			  , const typename Rtree::NodeT& n2 ) const
-	{
-	    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otval1 = mRtree.get().nodeValue( n1 )
-		, otval2 = mRtree.get().nodeValue( n2 );
-	    // always unsafe node is always equal to always unsafe node
-	    if( !otval1 && !otval2 )
-		return true;
-	    if( !otval1 || !otval2 )
-		return false;
-	    return otval1.value().get().id() < otval2.value().get().id();
-	}
-
-      private:
-	std::reference_wrapper< const Rtree > mRtree;
-    };
-
-    // \todo test wether repopulating image anew every iteration
-    // or identifying and removing refined nodes is more efficient
     NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
     {
 	auto img = rtree.image( initialSet );
@@ -172,20 +182,12 @@ std::pair< Ariadne::ValidatedKleenean
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 	if( counterexample.empty() )
-	{
 	    return std::make_pair( true, std::vector< typename Rtree::NodeT >() );
-	}
 
-	bool definitelyNotSpurious = definitely( !isSpurious( rtree
-							      , counterexample.begin(), counterexample.end()
-							      , initialImage.begin(), initialImage.end()
-							      , effort ) )
-	    , definitelyUnsafe = definitely( !rtree.isSafe( counterexample.back() ) );
-	
-	if( definitelyNotSpurious && definitelyUnsafe )
-	{
+	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end()
+				     , initialImage.begin(), initialImage.end(), effort ) ) &&
+	    definitely( !rtree.isSafe( counterexample.back() ) ) )
 	    return std::make_pair( false, counterexample );
-	}
 
 	for( uint i = 0; i < counterexample.size(); ++i )
 	{
