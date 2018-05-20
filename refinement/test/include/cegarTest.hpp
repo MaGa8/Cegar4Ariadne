@@ -13,7 +13,7 @@ struct CegarTest : public ITestGroup
     static std::default_random_engine mRandom;
 
     template< typename IntervalT >
-    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinementStrategy< IntervalT >& refiner )
+    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinement< IntervalT >& refiner )
     {
 	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)

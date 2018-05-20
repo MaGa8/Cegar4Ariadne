@@ -3,7 +3,7 @@
 
 #include "adjacencyDiGraph.hpp"
 #include "linkedFixedBranchTree.hpp"
-#include "refinementStrategy.hpp"
+#include "refinement.hpp"
 #include "treeValue.hpp"
 #include "graphValue.hpp"
 
@@ -307,7 +307,7 @@ class RefinementTree
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
     */
-    void refine( NodeT& v, const IRefinementStrategy< IntervalT >& r )
+    void refine( NodeT& v, const IRefinement< IntervalT >& r )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
 	// interior node cannot be refined -> do nothing

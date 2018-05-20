@@ -5,14 +5,14 @@
 
 //! \interface for refinement strategies subdividing a box into smaller boxes
 template< typename IntervalT >
-struct IRefinementStrategy
+struct IRefinement
 {
     virtual std::vector< Ariadne::Box< IntervalT > > refine( const Ariadne::Box< IntervalT >& b ) const = 0;
 };
 
 //! \class refine along the coordinate of the largest interval
 template< typename IntervalT >
-struct LargestSideRefiner : public IRefinementStrategy< IntervalT >
+struct LargestSideRefiner : public IRefinement< IntervalT >
 {
     std::vector< Ariadne::Box< IntervalT > > refine( const Ariadne::Box< IntervalT >& b ) const
     {

@@ -44,7 +44,7 @@ struct RefinementTreeTest : public ITestGroup
     };
 
     template< typename IntervalT >
-    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinementStrategy< IntervalT >& refiner )
+    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinement< IntervalT >& refiner )
     {
 	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
@@ -103,7 +103,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpBox;
-	std::unique_ptr< IRefinementStrategy< Ariadne::ExactIntervalType > > mpRefiner;
+	std::unique_ptr< IRefinement< Ariadne::ExactIntervalType > > mpRefiner;
 	const uint EXPANSION_SIZE;
 	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
 	STATEFUL_TEST( ExpansionTest );

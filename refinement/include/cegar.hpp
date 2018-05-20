@@ -164,7 +164,7 @@ std::pair< Ariadne::ValidatedKleenean
 	   , std::vector< typename RefinementTree< IntervalT >::NodeT > > cegar( RefinementTree< IntervalT >& rtree
 										 , const typename RefinementTree< IntervalT >::EnclosureT& initialSet
 										 , const Ariadne::Effort& effort
-										 , const IRefinementStrategy< IntervalT >& refinementStrat
+										 , const IRefinement< IntervalT >& refinementStrat
 										 , const uint maxNodes )
 {
     class NodeComparator;
