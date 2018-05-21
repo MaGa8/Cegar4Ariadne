@@ -20,7 +20,6 @@ std::default_random_engine RefinementTreeTest::mRandom = std::default_random_eng
 
 RefinementTreeTest::ExpansionTest::ExpansionTest( uint testSize, uint reps)
     : ITest( "expansion", testSize, reps )
-    , mpRefiner( new LargestSideRefiner< Ariadne::ExactIntervalType >() )
     , EXPANSION_SIZE( 2 )
 {}
 
@@ -56,7 +55,7 @@ void RefinementTreeTest::ExpansionTest::iterate()
     mExpandNodeDepth = tree::depth( mpRtree->tree()
 				    , static_cast< InsideGraphValue< typename ExactRefinementTree::RefinementT::NodeT >& >( *graph::value( mpRtree->leafMapping(), *iexp ) ).treeNode() );
 
-    mpRtree->refine( *iexp, *mpRefiner );
+    mpRtree->refine( *iexp, mRefiner );
 }
 
 bool RefinementTreeTest::ExpansionTest::check() const
@@ -150,8 +149,7 @@ void RefinementTreeTest::ImageTest::init()
 
 void RefinementTreeTest::ImageTest::iterate()
 {
-    LargestSideRefiner< typename ExactRefinementTree::IntervalT > refiner;
-    refineRandomLeaf( *mpRtree, refiner );
+    refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 bool RefinementTreeTest::ImageTest::check() const

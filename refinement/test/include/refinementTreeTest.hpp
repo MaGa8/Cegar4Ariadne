@@ -14,65 +14,65 @@
 
 struct RefinementTreeTest : public ITestGroup
 {
-    typedef RefinementTree< Ariadne::EffectiveIntervalType > EffectiveRefinementTree;
-    typedef RefinementTree< Ariadne::ExactIntervalType > ExactRefinementTree;
+    // typedef RefinementTree< Ariadne::EffectiveIntervalType > EffectiveRefinementTree;
+    typedef RefinementTree< Ariadne::Box< Ariadne::ExactIntervalType > > ExactRefinementTree;
 
     // typedef RefinementTree< int > EffectiveRefinementTree;
     // typedef RefinementTree< int > ExactRefinementTree;
     
     static std::default_random_engine mRandom;
-
-    template< typename IntervalT >
+    
+    template< typename E >
     class GraphVertexPrintConverter
     {
       public:
-	GraphVertexPrintConverter( const RefinementTree< IntervalT >& rtree ) : mRtree( rtree ) {}
+	GraphVertexPrintConverter( const RefinementTree< E >& rtree ) : mRtree( rtree ) {}
 	
-	Ariadne::Box< IntervalT > operator ()( const typename RefinementTree< IntervalT >::MappingT::ValueT& val )
+	E operator ()( const typename RefinementTree< E >::MappingT::ValueT& val )
 	{
 	    if( val->isInside() )
 	    {
-		auto& inVal = static_cast< InsideGraphValue< typename RefinementTree< IntervalT >::RefinementT::NodeT >& >( *val );
+		auto& inVal = static_cast< InsideGraphValue< typename RefinementTree< E >::RefinementT::NodeT >& >( *val );
 		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
 	    }
 	    else
-		return Ariadne::Box< IntervalT >::zero( 2 ); // hard coded cause using 2d tests only
+		return E::zero( 2 ); // hard coded cause using 2d tests only
 	}
 	
       private:
-	const RefinementTree< IntervalT >& mRtree;
+	const RefinementTree< E >& mRtree;
     };
 
-    template< typename IntervalT >
-    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinement< IntervalT >& refiner )
+    template< typename E >
+    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const IRefinement< E >& refiner )
     {
 	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
-	typename RefinementTree< IntervalT >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
+	typename RefinementTree< E >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
 	rt.refine( n, refiner );
 	return n;
     }
 
-    template< typename IntervalT >
-    static void refineEqualDepth( RefinementTree< IntervalT >& rt, const uint depth )
+    template< typename E >
+    static void refineEqualDepth( RefinementTree< E >& rt, const uint depth )
     {
-	LargestSideRefiner< IntervalT > refiner;
+	LargestSideRefiner< E > refiner;
 	for( uint i = 0; i < depth; ++i )
 	{
 	    auto lvs = rt.leaves();
-	    for( typename RefinementTree< IntervalT >::NodeT& lf : lvs )
+	    for( typename RefinementTree< E >::NodeT& lf : lvs )
 		rt.refine( lf, refiner );
 	}
     }
 
-    template< typename IntervalT >
-    static bool nodeEquals( const RefinementTree< IntervalT >& rt, const typename RefinementTree< IntervalT >::NodeT& n1, const typename RefinementTree< IntervalT >::NodeT& n2 )
+    template< typename E >
+    static bool nodeEquals( const RefinementTree< E >& rt, const typename RefinementTree< E >::NodeT& n1, const typename RefinementTree< E >::NodeT& n2 )
     {
 	return rt.nodeValue( n1 ) == rt.nodeValue( n2 );
     }
 
     template< typename IntervalT >
-    static RefinementTree< IntervalT > getDefaultTree( const Ariadne::Box< IntervalT > rootBox, uint cap )
+    static RefinementTree< Ariadne::Box< IntervalT > > getDefaultTree( const Ariadne::Box< IntervalT > rootBox, uint cap )
     {
 	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
@@ -84,7 +84,7 @@ struct RefinementTreeTest : public ITestGroup
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::Space< Ariadne::Real > vspace = {x, y};
 	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-	return RefinementTree< IntervalT >( rootBox, cs, f, Ariadne::Effort( 5 ) );
+	return RefinementTree< Ariadne::Box< IntervalT > >( rootBox, cs, f, Ariadne::Effort( 5 ) );
     }
 
     template< typename RefTree >
@@ -103,7 +103,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpBox;
-	std::unique_ptr< IRefinement< Ariadne::ExactIntervalType > > mpRefiner;
+	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
 	const uint EXPANSION_SIZE;
 	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
 	STATEFUL_TEST( ExpansionTest );
@@ -124,6 +124,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
+	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
 	STATEFUL_TEST( ImageTest );
     };
     

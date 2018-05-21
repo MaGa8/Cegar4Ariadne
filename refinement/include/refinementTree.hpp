@@ -19,45 +19,21 @@
 #include <limits>
 #include <memory>
 
-template< typename I >
+/*!
+  \class stores iterative refinements in tree and maintains links between leaf nodes
+  \param E type of enclosure stored
+*/
+template< typename E >
 class RefinementTree
 {
   public:
-    typedef I IntervalT;
-    typedef Ariadne::Box< IntervalT > EnclosureT;
+    typedef E EnclosureT;
     // use shared_ptr because data structures require copy constructibility
     // refinement tree: stores pointers to values that vary depending on whether they are stored in leafs or interior nodes
     typedef tree::LinkedFixedBranchTree< std::shared_ptr< InteriorTreeValue< EnclosureT >  >, 2 > RefinementT;
     // mapping graph: stores pointers to values that are either an "always-unsafe-node" or regular node storing a tree node
     typedef graph::AdjacencyDiGraph< std::shared_ptr< IGraphValue >, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
-
-    //! \return box containing the entire state space representable by doubles
-    static Ariadne::Box< IntervalT > universeBox( size_t dimension )
-    {
-	Ariadne::Array< IntervalT > is( dimension );
-	std::generate( is.begin(), dimension, [] () { return IntervalT( std::numeric_limits< double >::min()
-									, std::numeric_limits< double >::max() ); } );
-	return Ariadne::Box< IntervalT >( Ariadne::Vector< IntervalT >( is ) );
-    }
-
-    //! \return perform nsplits on toSplit on dimension ndim
-    //! \todo move to refiner class
-    static std::vector< Ariadne::Box< IntervalT > > splitN( const Ariadne::Box< IntervalT >& toSplit, size_t ndim, size_t nsplits )
-    {
-	Ariadne::Array< IntervalT > intervals = toSplit.array();
-	const typename IntervalT::LowerBoundType& l = toSplit.get( ndim ).lower();
-	const typename IntervalT::UpperBoundType& u = toSplit.get( ndim ).upper();
-	const typename IntervalT::WidthType modW = toSplit.get( ndim ).width() / nsplits;
-	std::vector< Ariadne::Box< IntervalT > > splits;
-	splits.reserve( nsplits );
-	for( uint i = 0; i < nsplits; ++i )
-	{
-	    intervals[ ndim ] = IntervalT( l + i * modW, l + (i + 1) * modW );
-	    splits.emplace_back( intervals );
-	}
-	return splits;
-    }
 
     /*!
       \param initial abstraction using a single box
@@ -247,11 +223,12 @@ class RefinementTree
     // \todo remove this one eventually
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue< EnclosureT >& srcVal, const NodeT& trg ) const
     {
-	const EnclosureT& srcBox = srcVal.getEnclosure();
+	const EnclosureT& srcEnc = srcVal.getEnclosure();
 	return isReachable( srcVal.getEnclosure(), trg );
     }
     
     //! \return true if there exists some point in src s.t. there exists a point in trg that can be reached
+    //! \todo prepare for generalization of boxes
     Ariadne::ValidatedUpperKleenean isReachable( const EnclosureT& src, const NodeT& trg ) const
     {
 	Ariadne::UpperBoxType ubMapped =  Ariadne::image( src, mDynamics );
@@ -307,7 +284,7 @@ class RefinementTree
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
     */
-    void refine( NodeT& v, const IRefinement< IntervalT >& r )
+    void refine( NodeT& v, const IRefinement< E >& r )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
 	// interior node cannot be refined -> do nothing
@@ -351,8 +328,8 @@ class RefinementTree
       \param to image boxes located in subtree rooted at to
       \return all nodes intersecting with from, but EXCLUDING always unsafe
     */
-    template< typename EnclosureT2 >
-    std::vector< NodeT > imageRecursive( const EnclosureT2& from, const typename RefinementT::NodeT& to ) const
+    template< typename E2 >
+    std::vector< NodeT > imageRecursive( const E2& from, const typename RefinementT::NodeT& to ) const
     {
     	// vector because there can't be duplicates
     	std::vector< NodeT > parts;

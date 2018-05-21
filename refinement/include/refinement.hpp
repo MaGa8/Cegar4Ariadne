@@ -4,15 +4,15 @@
 #include "geometry/box.hpp"
 
 //! \interface for refinement strategies subdividing a box into smaller boxes
-template< typename IntervalT >
+template< typename E >
 struct IRefinement
 {
-    virtual std::vector< Ariadne::Box< IntervalT > > refine( const Ariadne::Box< IntervalT >& b ) const = 0;
+    virtual std::vector< E > refine( const E& b ) const = 0;
 };
 
 //! \class refine along the coordinate of the largest interval
 template< typename IntervalT >
-struct LargestSideRefiner : public IRefinement< IntervalT >
+struct LargestSideRefiner : public IRefinement< Ariadne::Box< IntervalT > >
 {
     std::vector< Ariadne::Box< IntervalT > > refine( const Ariadne::Box< IntervalT >& b ) const
     {

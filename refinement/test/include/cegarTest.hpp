@@ -8,16 +8,16 @@
 
 struct CegarTest : public ITestGroup
 {
-    typedef RefinementTree< Ariadne::ExactIntervalType > ExactRefinementTree;
+    typedef RefinementTree< Ariadne::ExactBoxType > ExactRefinementTree;
 
     static std::default_random_engine mRandom;
 
-    template< typename IntervalT >
-    static typename RefinementTree< IntervalT >::NodeT refineRandomLeaf( RefinementTree< IntervalT >& rt, const IRefinement< IntervalT >& refiner )
+    template< typename E >
+    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const IRefinement< E >& refiner )
     {
 	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
-	typename RefinementTree< IntervalT >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
+	typename RefinementTree< E >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
 	rt.refine( n, refiner );
 	return n;
     }

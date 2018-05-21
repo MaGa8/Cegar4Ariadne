@@ -5,15 +5,16 @@
 
 #include <functional>
 
+template< typename E >
 class NodeComparator
 {
   public:
-    NodeComparator( const Rtree& rtree ) : mRtree( rtree ) {}
+    NodeComparator( const RefinementTree< E >& rtree ) : mRtree( rtree ) {}
 		       
-    bool operator ()( const typename Rtree::NodeT& n1
-		      , const typename Rtree::NodeT& n2 ) const
+    bool operator ()( const typename RefinementTree< E >::NodeT& n1
+		      , const typename RefinementTree< E >::NodeT& n2 ) const
     {
-	std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > otval1 = mRtree.get().nodeValue( n1 )
+	std::optional< std::reference_wrapper< const InteriorTreeValue< E > > > otval1 = mRtree.get().nodeValue( n1 )
 	    , otval2 = mRtree.get().nodeValue( n2 );
 	// always unsafe node is always equal to always unsafe node
 	if( !otval1 && !otval2 )
@@ -24,7 +25,7 @@ class NodeComparator
     }
 
   private:
-    std::reference_wrapper< const Rtree > mRtree;
+    std::reference_wrapper< const RefinementTree< E > > mRtree;
 };
 
 /*!
@@ -32,24 +33,24 @@ class NodeComparator
   any path terminates in
   1) loop leading back to state along path
   2) state with violated safety conditions
-  \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< IntervalT >::NodeT
+  \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< E >::NodeT
   \return vector of nodes terminated by a possibly unsafe node
   \todo add parameter to control ordering of branches in dfs exploration 
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
-template< typename IntervalT, typename NodeIterT >
-std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( RefinementTree< IntervalT >& rtree
+template< typename E, typename NodeIterT >
+std::vector< typename RefinementTree< E >::NodeT > findCounterexample( RefinementTree< E >& rtree
 									       , NodeIterT iImgBegin, NodeIterT iImgEnd
-									       , const std::vector< typename RefinementTree< IntervalT >::NodeT >& path = {} )
+									       , const std::vector< typename RefinementTree< E >::NodeT >& path = {} )
 {
-    typedef RefinementTree< IntervalT > Rtree;
+    typedef RefinementTree< E > Rtree;
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
     {
 	auto iLoop = std::find_if( path.begin(), path.end()
-				   , std::bind( &RefinementTree< IntervalT >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
+				   , std::bind( &RefinementTree< E >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
 	if( iLoop == path.end() )
 	{
-	    std::vector< typename RefinementTree< IntervalT >::NodeT > copyPath( path.begin(), path.end() );
+	    std::vector< typename RefinementTree< E >::NodeT > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
 	    // counterexample found (could not happen if node was visited before)
 	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
@@ -57,7 +58,7 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
 
 	    // recurse & return
 	    auto posts =  rtree.postimage( *iImgBegin );
-	    std::vector< typename RefinementTree< IntervalT >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
+	    std::vector< typename RefinementTree< E >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
 	    if( !cex.empty() )
 		return cex;
 	}
@@ -69,14 +70,14 @@ std::vector< typename RefinementTree< IntervalT >::NodeT > findCounterexample( R
   \param ibegin iterator over sequence of refinement tree nodes
   \return iterator to node pt lies in, according to eval
 */
-template< typename IntervalT, typename NumberT, typename NodeIterT >
-NodeIterT findContaining( const RefinementTree< IntervalT >& rtree, const Ariadne::Point< NumberT > pt
+template< typename E, typename NumberT, typename NodeIterT >
+NodeIterT findContaining( const RefinementTree< E >& rtree, const Ariadne::Point< NumberT > pt
 			  , NodeIterT ibegin, const NodeIterT& iend
 			  , const std::function< bool( const Ariadne::ValidatedKleenean& ) >& eval )
 {
     // center is not contained in initial image
     return std::find_if( ibegin, iend
-			 ,[&] ( const typename RefinementTree< IntervalT >::NodeT& n )
+			 ,[&] ( const typename RefinementTree< E >::NodeT& n )
 			 {
 			     auto val = rtree.nodeValue( n );
 			     if( !val )
@@ -88,21 +89,21 @@ NodeIterT findContaining( const RefinementTree< IntervalT >& rtree, const Ariadn
 
 // implement this using lower kleenean?
 /*! 
-  \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< IntervalT >::NodeT
-  \param beginImage and endImage iterators to beginning and end of image of initial set obtained from refinement tree, should dereference to typename RefinementTree< IntervalT >::NodeT as well
+  \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< E >::NodeT
+  \param beginImage and endImage iterators to beginning and end of image of initial set obtained from refinement tree, should dereference to typename RefinementTree< E >::NodeT as well
   \return false if there definitely exists a point that is mapped to the terminal state of the counterexample, indeterminate otherwise, including if there does not possibly exist such a point 
   why upper kleenean?
   if return false, know for sure that counterexample is not spurious because a point exist with trajectory leading to unsafe state
   if return true center point did not map along trajectory
   \todo allow divergence from supposed counterexample, i.e. follow trajectory of center point until loop
 */
-template< typename IntervalT, typename PathIterT, typename ImageIterT >
-Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& rtree
+template< typename E, typename PathIterT, typename ImageIterT >
+Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 					    , PathIterT beginCounter, PathIterT endCounter
 					    , ImageIterT beginImage, ImageIterT endImage
 					    , const Ariadne::Effort& effort )
 {
-    typedef RefinementTree< IntervalT > Rtree;
+    typedef RefinementTree< E > Rtree;
     
     // determine: initial set and first state of counterexample intersect
     std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oBeginCex = rtree.nodeValue( *beginCounter );
@@ -159,17 +160,16 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< IntervalT >& r
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename IntervalT >
+template< typename E >
 std::pair< Ariadne::ValidatedKleenean
-	   , std::vector< typename RefinementTree< IntervalT >::NodeT > > cegar( RefinementTree< IntervalT >& rtree
-										 , const typename RefinementTree< IntervalT >::EnclosureT& initialSet
+	   , std::vector< typename RefinementTree< E >::NodeT > > cegar( RefinementTree< E >& rtree
+										 , const typename RefinementTree< E >::EnclosureT& initialSet
 										 , const Ariadne::Effort& effort
-										 , const IRefinement< IntervalT >& refinementStrat
+										 , const IRefinement< E >& refinementStrat
 										 , const uint maxNodes )
 {
-    class NodeComparator;
-    typedef RefinementTree< IntervalT > Rtree;
-    typedef std::set< typename Rtree::NodeT, NodeComparator > NodeSet;
+    typedef RefinementTree< E > Rtree;
+    typedef std::set< typename Rtree::NodeT, NodeComparator< Ariadne::ExactBoxType > > NodeSet;
 
     NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
     {
