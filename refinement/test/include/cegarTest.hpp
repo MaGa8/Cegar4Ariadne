@@ -64,7 +64,7 @@ struct CegarTest : public ITestGroup
     {
 	static const uint MAX_NODES_FACTOR = 20; // because: 50 * 200 = b10,000
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	Ariadne::ExactBoxType mInitial;
+	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
 	LargestSideRefiner< Ariadne::ExactIntervalType > mRefinement;
 	CompleteCounterexample< Ariadne::ExactBoxType > mLocator;
 

@@ -165,7 +165,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 template< typename E, typename LocatorT >
 std::pair< Ariadne::ValidatedKleenean
 	   , std::vector< typename RefinementTree< E >::NodeT > > cegar( RefinementTree< E >& rtree
-									 , const typename RefinementTree< E >::EnclosureT& initialSet
+									 , const Ariadne::ConstraintSet& initialSet
 									 , const Ariadne::Effort& effort
 									 , const IRefinement< E >& refinement
 									 , const LocatorT& locator
@@ -174,9 +174,12 @@ std::pair< Ariadne::ValidatedKleenean
     typedef RefinementTree< E > Rtree;
     typedef std::set< typename Rtree::NodeT, NodeComparator< Ariadne::ExactBoxType > > NodeSet;
 
+    std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > interPred =
+	[effort] (auto& enc, auto& cset) {return cset.overlaps( enc ).check( effort ); };
+    
     NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
     {
-	auto img = rtree.image( initialSet );
+	auto img = rtree.intersection( initialSet, interPred );
 	initialImage.insert( img.begin(), img.end() );
     }
     
@@ -205,20 +208,9 @@ std::pair< Ariadne::ValidatedKleenean
 		if( iRefined != initialImage.end() )
 		{
 		    initialImage.erase( iRefined );
-		    auto refinedInitials = rtree.image( initialSet, treeNodeRef );
+		    auto refinedInitials = rtree.intersection( treeNodeRef, initialSet, interPred );
 		    initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
 		}
-		// for( const typename Rtree::NodeT& initial : initialImage )
-		// {
-		//     auto initialVal = rtree.nodeValue( initial );
-		//     if( initialVal )
-		//     {
-		// 	auto refinedImg = rtree.image( initialSet, treeNodeRef );
-		// 	initialImage.insert( refinedImg.begin(), refinedImg.end() );
-		//     }
-		// }
-		
-		
 	    }
 	}
     }

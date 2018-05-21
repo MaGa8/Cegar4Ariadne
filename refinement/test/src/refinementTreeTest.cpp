@@ -164,7 +164,7 @@ bool RefinementTreeTest::ImageTest::check() const
 	    , { (hig.upper().get_d() - smallerHig) / 2, (hig.upper().get_d() + smallerHig) / 2 } } );
 
     // for each leaf, check: either does not intersect smaller box or is contained in image
-    std::vector< typename ExactRefinementTree::NodeT > imageSmallerBox = mpRtree->image( smallerBox );
+    std::vector< typename ExactRefinementTree::NodeT > imageSmallerBox = mpRtree->intersection( smallerBox );
     for( typename ExactRefinementTree::NodeT leaf : mpRtree->leaves( tree::root( mpRtree->tree() ) ) )
     {
 	// leaf should have value

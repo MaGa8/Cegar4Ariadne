@@ -126,22 +126,42 @@ class RefinementTree
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from, including outside node
     template< typename EnclosureT2 >
-    std::vector< NodeT > image( const EnclosureT2& from ) const
+    std::vector< NodeT > intersection( const EnclosureT2& from ) const
     {
-	return image( from, root( mRefinements ) );
+	return intersection( from, root( mRefinements ) );
     }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \param subtreeRoot require leaves to be rooted at this node
     //! \return most refined boxes intersecting with from, including outside node
     template< typename EnclosureT2 >
-    std::vector< NodeT > image( const EnclosureT2& from, const typename RefinementT::NodeT& subtreeRoot ) const
+    std::vector< NodeT > intersection( const EnclosureT2& with, const typename RefinementT::NodeT& subtreeRoot ) const
     {
-	std::vector< NodeT > img = imageRecursive( from, subtreeRoot );
+	std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const EnclosureT2& ) > inter = [this] (const EnclosureT& n, const EnclosureT2& with ) {
+	    return !Ariadne::intersection( n, with ).is_empty(); };
+	std::vector< NodeT > abs = intersectionRecursive( subtreeRoot, with, inter );
 	// image recursive does not add outside
-	if( definitely( !(Ariadne::intersection( from, tree::value( tree(), tree::root( tree() ) )->getEnclosure() ) == from ) ) )
-	    img.push_back( outside() );
-	return img;
+	if( definitely( !(Ariadne::intersection( with, tree::value( tree(), tree::root( tree() ) )->getEnclosure() ) == with ) ) )
+	    abs.push_back( outside() );
+	return abs;
+    }
+
+    //! \brief generalization of other intersection overloads
+    template< typename SpaceT >
+    std::vector< NodeT > intersection( const typename RefinementT::NodeT& subRoot, const SpaceT& s
+				       , const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& pred )
+    {
+	std::vector< NodeT > abs = intersectionRecursive( subRoot, s, pred );
+	if( possibly( relates( outside(), s, pred ) ) )
+	    abs.push_back( outside() );
+	return abs;
+    }
+
+    template< typename SpaceT >
+    std::vector< NodeT > intersection( const SpaceT& s
+				       , const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& pred )
+    {
+	return intersection( tree::root( tree() ), s, pred );
     }
 
     // all node accessors: can be declared const, because tree or graph need to be accessed in order to change anything
@@ -329,30 +349,24 @@ class RefinementTree
       \return all nodes intersecting with from, but EXCLUDING always unsafe
     */
     template< typename E2 >
-    std::vector< NodeT > imageRecursive( const E2& from, const typename RefinementT::NodeT& to ) const
+    std::vector< NodeT > intersectionRecursive( const typename RefinementT::NodeT& subRoot, const E2& with
+						, const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const E2& ) >& pred ) const
     {
     	// vector because there can't be duplicates
     	std::vector< NodeT > parts;
-	const InteriorTreeValue< EnclosureT >& tv = *tree::value( mRefinements, to );
-    	const EnclosureT& boxTo = tv.getEnclosure();
-    	auto inter = Ariadne::intersection( from, boxTo );
-	// result is either Boolean for ExactInterval or LowerKleenean otherwise -> convert implicitly to latter if necessary
-	//! \todo would like to use LowerKleenean only and check with specific effort
-	Ariadne::ValidatedLowerKleenean isEmpty = inter.is_empty();
+	const InteriorTreeValue< EnclosureT >& subRootVal = *tree::value( mRefinements, subRoot );
+    	const EnclosureT& subRootBox = subRootVal.getEnclosure();
 
-	// if there's no chance that to and from intersect: return empty
-	if( definitely( isEmpty/*.check( mEffort )*/ ) )
+	if( definitely( !pred( subRootBox, with ) ) )
     	    return parts;
-    	else if( tree::isLeaf( mRefinements, to ) )
-    	{
-	    parts.push_back( static_cast< const LeafTreeValue< EnclosureT, typename MappingT::VertexT >& >( tv ).graphNode() );
-    	}
+    	else if( tree::isLeaf( mRefinements, subRoot ) )
+	    parts.push_back( static_cast< const LeafTreeValue< EnclosureT, typename MappingT::VertexT >& >( subRootVal ).graphNode() );
     	else
     	{
-    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, to );
+    	    typename tree::FixedBranchTreeTraits< RefinementT >::CRangeT cs = tree::children( mRefinements, subRoot );
     	    for( ; cs.first != cs.second; ++cs.first )
     	    {
-    		std::vector< NodeT > rns = imageRecursive( from, *cs.first );
+    		std::vector< NodeT > rns = intersectionRecursive( *cs.first, with, pred );
     		parts.insert( parts.end(), rns.begin(), rns.end() );
     	    }
     	}
