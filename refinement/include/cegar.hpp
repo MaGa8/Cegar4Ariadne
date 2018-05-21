@@ -2,6 +2,8 @@
 #define CEGAR_HPP
 
 #include "refinementTree.hpp"
+#include "refinement.hpp"
+#include "locator.hpp"
 
 #include <functional>
 
@@ -160,13 +162,14 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E >
+template< typename E, typename LocatorT >
 std::pair< Ariadne::ValidatedKleenean
 	   , std::vector< typename RefinementTree< E >::NodeT > > cegar( RefinementTree< E >& rtree
-										 , const typename RefinementTree< E >::EnclosureT& initialSet
-										 , const Ariadne::Effort& effort
-										 , const IRefinement< E >& refinementStrat
-										 , const uint maxNodes )
+									 , const typename RefinementTree< E >::EnclosureT& initialSet
+									 , const Ariadne::Effort& effort
+									 , const IRefinement< E >& refinement
+									 , const LocatorT& locator
+									 , const uint maxNodes )
 {
     typedef RefinementTree< E > Rtree;
     typedef std::set< typename Rtree::NodeT, NodeComparator< Ariadne::ExactBoxType > > NodeSet;
@@ -189,25 +192,33 @@ std::pair< Ariadne::ValidatedKleenean
 	    definitely( !rtree.isSafe( counterexample.back() ) ) )
 	    return std::make_pair( false, counterexample );
 
-	for( uint i = 0; i < counterexample.size(); ++i )
+	for( const typename Rtree::NodeT& refine : locator( counterexample.begin(), counterexample.end() ) )
 	{
-	    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oref = rtree.nodeValue( counterexample[ i ] );
-	    if( oref )
+	    if( rtree.nodeValue( refine ) )
 	    {
-		const IGraphValue& graphValRef = *graph::value( rtree.leafMapping(), counterexample[ i ] ); // dont use this after refinement
-		const typename Rtree::RefinementT::NodeT& treeNodeRef = static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( graphValRef ).treeNode();
-		rtree.refine( counterexample[ i ], refinementStrat );
-		// iterate over components of initial set and add their images starting from refined node for best performance
-		for( const typename Rtree::NodeT& initial : initialImage )
+		const typename Rtree::RefinementT::NodeT& treeNodeRef =
+		    static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
+		auto iRefined = initialImage.find( refine );
+		
+		rtree.refine( refine, refinement );
+
+		if( iRefined != initialImage.end() )
 		{
-		    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > treeValInitial = rtree.nodeValue( initial );
-		    if( treeValInitial )
-		    {
-			auto refinedImg = rtree.image( initialSet, treeNodeRef );
-			initialImage.insert( refinedImg.begin(), refinedImg.end() );
-		    }
+		    initialImage.erase( iRefined );
+		    auto refinedInitials = rtree.image( initialSet, treeNodeRef );
+		    initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
 		}
-		initialImage.erase( counterexample[ i ] );
+		// for( const typename Rtree::NodeT& initial : initialImage )
+		// {
+		//     auto initialVal = rtree.nodeValue( initial );
+		//     if( initialVal )
+		//     {
+		// 	auto refinedImg = rtree.image( initialSet, treeNodeRef );
+		// 	initialImage.insert( refinedImg.begin(), refinedImg.end() );
+		//     }
+		// }
+		
+		
 	    }
 	}
     }

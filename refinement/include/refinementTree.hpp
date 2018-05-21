@@ -284,7 +284,7 @@ class RefinementTree
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
     */
-    void refine( NodeT& v, const IRefinement< E >& r )
+    void refine( const NodeT& v, const IRefinement< E >& r )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
 	// interior node cannot be refined -> do nothing
@@ -371,7 +371,7 @@ class RefinementTree
     }
 
     //! \note adapts edges of parent node after refinement
-    void refineEdges( NodeT& parent, NodeT& child )
+    void refineEdges( const NodeT& parent, const NodeT& child )
     {
 	// add edges
 	std::vector< NodeT > pres( preimage( parent ) );
@@ -389,7 +389,7 @@ class RefinementTree
     }
 
     //! \brief adds links from all leaves in subtree at src to all leaves in subtree at trg that are reachable
-    void connectAllLeaves( NodeT& src, NodeT& trg )
+    void connectAllLeaves( const NodeT& src, const NodeT& trg )
     {
 	// auto srcVal = nodeValue( src ), trgVal = nodeValue( trg );
 
@@ -421,7 +421,7 @@ class RefinementTree
     }
 
     //! \brief removes v from the graph and transforms the tree node stored into an interior node
-    void removeFromGraph( NodeT& n )
+    void removeFromGraph( const NodeT& n )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, n );
 	if( gval->isInside() )

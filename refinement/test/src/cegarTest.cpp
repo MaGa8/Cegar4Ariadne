@@ -96,7 +96,7 @@ bool CegarTest::FindNoCounterexampleTest::check() const
     return true;
 }
 
-CegarTest::TEST_CTOR( LoopTest, "cegar loop" )
+CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
 
 void CegarTest::LoopTest::iterate()
 {
@@ -148,7 +148,7 @@ bool CegarTest::LoopTest::check() const
     	}
     }
 
-    auto cegarCounterex = cegar( *mpRtree, mInitial, Ariadne::Effort( 10 ), mRefiner, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, mInitial, Ariadne::Effort( 10 ), mRefinement, mLocator, MAX_NODES_FACTOR * mTestSize );
     if( foundCounterexample && definitely( cegarCounterex.first ) )
     {
 	std::cout << "found ";
