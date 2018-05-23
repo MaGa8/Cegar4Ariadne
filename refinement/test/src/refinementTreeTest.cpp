@@ -127,9 +127,9 @@ bool RefinementTreeTest::LeavesTest::check() const
     return true;
 }
 
-RefinementTreeTest::TEST_CTOR( ImageTest, "completeness of components of image" );
+RefinementTreeTest::TEST_CTOR( IntersectionTest, "completeness of intersection with box" );
 
-void RefinementTreeTest::ImageTest::init()
+void RefinementTreeTest::IntersectionTest::init()
 {
     mpRootBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
 
@@ -147,12 +147,12 @@ void RefinementTreeTest::ImageTest::init()
     iterate();
 }
 
-void RefinementTreeTest::ImageTest::iterate()
+void RefinementTreeTest::IntersectionTest::iterate()
 {
     refineRandomLeaf( *mpRtree, mRefiner );
 }
 
-bool RefinementTreeTest::ImageTest::check() const
+bool RefinementTreeTest::IntersectionTest::check() const
 {
     // dimensions of root box
     Ariadne::Bounds< Ariadne::FloatDP > wid = (*mpRootBox)[ 0 ].upper() - (*mpRootBox)[ 0 ].lower()
@@ -185,6 +185,97 @@ bool RefinementTreeTest::ImageTest::check() const
 		return false;
 	    }
 	}
+    }
+    return true;
+}
+
+RefinementTreeTest::TEST_CTOR( CSetIntersectionTest, "completeness of intersection with constraint set" );
+
+void RefinementTreeTest::CSetIntersectionTest::init()
+{
+    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
+
+    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+    Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
+    // only upper bound on + values
+    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
+    Ariadne::EffectiveConstraintSet cs = { c1 };
+    // static dynamics
+    Ariadne::RealVariable x( "x" ), y( "y" );
+    Ariadne::Space< Ariadne::Real > vspace = {x, y};
+    Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
+    mpRtree.reset( new ExactRefinementTree( *mpRootBox, cs, f, Ariadne::Effort( 5 ) ) );
+    iterate();
+}
+
+void RefinementTreeTest::CSetIntersectionTest::iterate()
+{
+    refineRandomLeaf( *mpRtree, mRefiner );
+}
+
+bool RefinementTreeTest::CSetIntersectionTest::check() const
+{
+    // dimensions of root box
+    Ariadne::Bounds< Ariadne::FloatDP > wid = (*mpRootBox)[ 0 ].upper() - (*mpRootBox)[ 0 ].lower()
+	, hig = (*mpRootBox)[ 1 ].upper() - (*mpRootBox)[ 1 ].lower();
+ 
+
+
+   // generate new random box
+    std::uniform_real_distribution<> rdist( 0.0, std::min( wid.lower().get_d(), hig.lower().get_d() ) );
+    Ariadne::EffectiveScalarFunction x = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, y = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+    
+    // Ariadne::ConstraintSet constraints ( { -Ariadne::Real( rdist( mRandom ) ) <= x + y <= Ariadne::Real( rdist( mRandom ) )
+    // 		, -Ariadne::Real( rdist( mRandom ) ) <= x <= Ariadne::Real( rdist( mRandom ) )
+    // 		} );
+
+    Ariadne::ConstraintSet constraints( { -Ariadne::Real( rdist( mRandom ) ) <= x <= Ariadne::Real( rdist( mRandom ) )
+		, -Ariadne::Real( rdist( mRandom ) ) <= y <= Ariadne::Real( rdist( mRandom ) ) } );
+
+    // std::cout << "constraints " << constraints << std::endl;
+    
+    std::function< Ariadne::ValidatedLowerKleenean( const typename ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > intersect =
+	[this] (auto& enc, auto& cs) { return cs.overlaps( enc ).check( mpRtree->effort() ); };
+	
+    // for each leaf, check: either does not intersect smaller box or is contained in image
+    std::vector< typename ExactRefinementTree::NodeT > constraintIntersection = mpRtree->intersection( constraints, intersect );
+    for( typename ExactRefinementTree::NodeT leaf : mpRtree->leaves() )
+    {
+	// leaf should have value
+	const typename ExactRefinementTree::EnclosureT& leafBox = mpRtree->nodeValue( leaf ).value().get().getEnclosure();
+	if( possibly( intersect( leafBox, constraints ) ) )
+	{
+	    typename std::vector< typename ExactRefinementTree::NodeT >::iterator iImg;
+	    iImg = std::find_if( constraintIntersection.begin(), constraintIntersection.end()
+				 , [&leaf, this] (const typename ExactRefinementTree::NodeT& n) {
+				     auto nval = mpRtree->nodeValue( n );
+				     if( !nval )
+					 return false;
+				     return mpRtree->nodeValue( leaf ).value().get() == nval.value().get(); } );
+	    // no equivalent box found in image
+	    if( iImg == constraintIntersection.end() )
+	    {
+		D( std::cout << "leaf box " << leafBox << " is not returned as image of " << constraints << " even though it is contained inside" << std::endl; );
+		return false;
+	    }
+	    constraintIntersection.erase( iImg );
+	}
+    }
+    if( constraintIntersection.size() >= 1 )
+    {
+	std::cout << "there are elements returned as intersection which could not be found as leaves" << std::endl;
+	for( const typename ExactRefinementTree::NodeT& n : constraintIntersection )
+	{
+	    auto nval = mpRtree->nodeValue( n );
+	    if( nval )
+		std::cout << nval.value().get().getEnclosure();
+	    else
+		std::cout << "[outside] (okay, is not a leaf)";
+	    std::cout << std::endl;
+	}
+	return false;
     }
     return true;
 }
@@ -431,7 +522,8 @@ void RefinementTreeTest::init()
 
     addTest( new ExpansionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new LeavesTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new ImageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new IntersectionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new CSetIntersectionTest( 1*mTestSize, 0.1 * mRepetitions ), pRcontinuous );
     addTest( new NonLeafRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
     addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );

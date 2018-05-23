@@ -30,6 +30,9 @@ class NodeComparator
     std::reference_wrapper< const RefinementTree< E > > mRtree;
 };
 
+template< typename E >
+using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
+
 /*!
   runs DFS to find counterexample
   any path terminates in
@@ -41,9 +44,9 @@ class NodeComparator
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
 template< typename E, typename NodeIterT >
-std::vector< typename RefinementTree< E >::NodeT > findCounterexample( RefinementTree< E >& rtree
-									       , NodeIterT iImgBegin, NodeIterT iImgEnd
-									       , const std::vector< typename RefinementTree< E >::NodeT >& path = {} )
+CounterexampleT< E > findCounterexample( RefinementTree< E >& rtree
+					 , NodeIterT iImgBegin, NodeIterT iImgEnd
+					 , const std::vector< typename RefinementTree< E >::NodeT >& path = {} )
 {
     typedef RefinementTree< E > Rtree;
     for( ; iImgBegin != iImgEnd; ++iImgBegin )
@@ -52,7 +55,7 @@ std::vector< typename RefinementTree< E >::NodeT > findCounterexample( Refinemen
 				   , std::bind( &RefinementTree< E >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
 	if( iLoop == path.end() )
 	{
-	    std::vector< typename RefinementTree< E >::NodeT > copyPath( path.begin(), path.end() );
+	    CounterexampleT< E > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
 	    // counterexample found (could not happen if node was visited before)
 	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
@@ -60,7 +63,7 @@ std::vector< typename RefinementTree< E >::NodeT > findCounterexample( Refinemen
 
 	    // recurse & return
 	    auto posts =  rtree.postimage( *iImgBegin );
-	    std::vector< typename RefinementTree< E >::NodeT > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
+	    CounterexampleT< E > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
 	    if( !cex.empty() )
 		return cex;
 	}
@@ -88,6 +91,15 @@ NodeIterT findContaining( const RefinementTree< E >& rtree, const Ariadne::Point
 			 } );
 }
 
+template< typename F >
+Ariadne::ExactBoxType boundsPoint2Box( const Ariadne::Point< Ariadne::Bounds< F > >& pt )
+{
+    Ariadne::Array< Ariadne::ExactIntervalType > intervals( pt.dimension() );
+    std::transform( pt.array().begin(), pt.array().end(), intervals.begin()
+		    , [] (const Ariadne::Bounds< F >& i) {
+			return Ariadne::ExactIntervalType( cast_exact( i.lower() ), cast_exact( i.upper() ) ); } );
+    return Ariadne::Box( Ariadne::Vector( intervals ) );
+}
 
 // implement this using lower kleenean?
 /*! 
@@ -99,10 +111,10 @@ NodeIterT findContaining( const RefinementTree< E >& rtree, const Ariadne::Point
   if return true center point did not map along trajectory
   \todo allow divergence from supposed counterexample, i.e. follow trajectory of center point until loop
 */
-template< typename E, typename PathIterT, typename ImageIterT >
+template< typename E, typename PathIterT >
 Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 					    , PathIterT beginCounter, PathIterT endCounter
-					    , ImageIterT beginImage, ImageIterT endImage
+					    , const Ariadne::ConstraintSet& initialSet
 					    , const Ariadne::Effort& effort )
 {
     typedef RefinementTree< E > Rtree;
@@ -112,22 +124,32 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 
     if( !oBeginCex )
     {
-	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const typename Rtree::EnclosureT& ) > notCovers = [] (auto& nodeEnc, auto& initialEnc ) {
-	    return Ariadne::intersection( initialEnc, nodeEnc ) != nodeEnc; };
-	if( std::any_of( beginImage, endImage, [&rtree, &notCovers] (const typename Rtree::NodeT& n) {
-		    return possibly( rtree.relates( n, rtree.initialEnclosure(), notCovers ) ); } ) ) 
+	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > covers =
+	    [&effort] (auto& nodeEnc, auto& cset ) {return cset.covers( nodeEnc ).check( effort ); };
+
+	if( definitely( rtree.relates( rtree.outside(), initialSet, covers ) ) ) // passed in outside: tests whether initial box is not covered
 	    return false;
+	// if( std::any_of( beginImage, endImage, [&rtree, &notCovers] (const typename Rtree::NodeT& n) {
+		    // return possibly( rtree.relates( n, rtree.initialEnclosure(), notCovers ) ); } ) ) 
+	    // return false;
 	else
 	    return true;
     }
 
+    // find correct typedef to work with
     Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > currPoint = oBeginCex.value().get().getEnclosure().centre();
-    std::function< bool( const typename Rtree::NodeT& ) > contains2 = [&currPoint, &rtree] (auto& n) {
-	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > >& ) > contains =
-	  [] (auto& enc, auto& pt ) { return enc.contains( pt ); };
-	return possibly( rtree.relates( n, currPoint, contains ) ); };
-    if( std::none_of( beginImage, endImage, contains2 ) )
+
+    // std::function< bool( const typename Rtree::NodeT& ) > contains2 = [&currPoint, &rtree] (auto& n) {
+    // 	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > >& ) > contains =
+    // 	  [] (auto& enc, auto& pt ) { return enc.contains( pt ); };
+    // 	return possibly( rtree.relates( n, currPoint, contains ) ); };
+    // if( std::none_of( beginImage, endImage, contains2 ) )
+    // 	return true;
+
+    Ariadne::ExactBoxType pointAsExactBox = boundsPoint2Box( currPoint );
+    if( possibly( !initialSet.covers( pointAsExactBox ) ) )
 	return true;
+    
     //map forward
     const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
     for( PathIterT nextCounter = beginCounter + 1; nextCounter != endCounter; beginCounter = nextCounter++ )
@@ -163,13 +185,12 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
 template< typename E, typename LocatorT >
-std::pair< Ariadne::ValidatedKleenean
-	   , std::vector< typename RefinementTree< E >::NodeT > > cegar( RefinementTree< E >& rtree
-									 , const Ariadne::ConstraintSet& initialSet
-									 , const Ariadne::Effort& effort
-									 , const IRefinement< E >& refinement
-									 , const LocatorT& locator
-									 , const uint maxNodes )
+std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
+								     , const Ariadne::ConstraintSet& initialSet
+								     , const Ariadne::Effort& effort
+								     , const IRefinement< E >& refinement
+								     , LocatorT locator
+								     , const uint maxNodes )
 {
     typedef RefinementTree< E > Rtree;
     typedef std::set< typename Rtree::NodeT, NodeComparator< Ariadne::ExactBoxType > > NodeSet;
@@ -188,14 +209,13 @@ std::pair< Ariadne::ValidatedKleenean
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 	if( counterexample.empty() )
-	    return std::make_pair( true, std::vector< typename Rtree::NodeT >() );
+	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
 
-	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end()
-				     , initialImage.begin(), initialImage.end(), effort ) ) &&
+	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort ) ) &&
 	    definitely( !rtree.isSafe( counterexample.back() ) ) )
-	    return std::make_pair( false, counterexample );
+	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
 
-	for( const typename Rtree::NodeT& refine : locator( counterexample.begin(), counterexample.end() ) )
+	for( const typename Rtree::NodeT& refine : locator( rtree, counterexample.begin(), counterexample.end() ) )
 	{
 	    if( rtree.nodeValue( refine ) )
 	    {

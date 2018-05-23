@@ -13,12 +13,14 @@
 
 std::default_random_engine CegarTest::mRandom = std::default_random_engine( std::random_device()() );
 
+std::function< Ariadne::ValidatedLowerKleenean( const typename CegarTest::ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > CegarTest::mIntersectConstraints =
+    [] (auto& enc, auto& cset ) {return cset.overlaps( enc ).check( Ariadne::Effort( 10 ) ); };
+
 CegarTest::TEST_CTOR( FindCounterexampleTest, "finds counterexample" )
 
 void CegarTest::FindCounterexampleTest::init()
 {
     double boundary = 1000, delta = 1;
-    mInitial = { {-1, 1}, {-1, 1} };
 
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( {x, y}, {(1 + x)*(1 + x), (1 + y)*(1 + y)} );
@@ -26,6 +28,8 @@ void CegarTest::FindCounterexampleTest::init()
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
+    
+    mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
 
     Ariadne::ExactBoxType initialAbs = { {-boundary - delta, boundary + delta}               // initial box wide enough so counterexamples inside exist
 					 , {-boundary - delta, boundary + delta} };          // cs.constraint_bounds();
@@ -40,8 +44,9 @@ void CegarTest::FindCounterexampleTest::iterate()
 
 bool CegarTest::FindCounterexampleTest::check() const
 {
-    auto initialNodes = mpRtree->intersection( mInitial );
-    auto counterex  = findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end() );
+    auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
+    
+    auto counterex = findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end() );
     // system radially diverges
     if( graph::value( mpRtree->leafMapping(), counterex.back() )->isInside() )
 	D( std::cout << "inside" << std::endl; );
@@ -49,6 +54,12 @@ bool CegarTest::FindCounterexampleTest::check() const
 	D( std::cout << "outside" << std::endl; );
     if( counterex.empty() )
 	return false;
+
+    if( definitely( !mpRtree->relates( counterex.front(), *mpInitial, mIntersectConstraints ) ) )
+    {
+	D( std::cout << "counterexample does not begin in initial set" << std::endl; );
+	return false;
+    }
     return true;
 }
 
@@ -58,15 +69,16 @@ CegarTest::TEST_CTOR( FindNoCounterexampleTest, "not finds nonexistent counterex
 void CegarTest::FindNoCounterexampleTest::init()
 {
     double boundary = 1.005, delta = -0.006; // cheating a bit, so initial abstraction is within constraint boundary
-    mInitial = { {-1, 1}, {-1, 1} };
 
-    Ariadne::RealVariable x( "x" ), y( "y" );
+Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::RealConstant b1( "b1", Ariadne::Real( 3.7 ) ), b2( "b2", Ariadne::Real( 3.8 ) );
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( {x, y}, { b1*x*(1 - x), b2*y*(1 - y)} );
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
+
+mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
 
     Ariadne::ExactBoxType initialAbs = { {0, 1}               // initial box wide enough so counterexamples inside exist
 					 , {0, 1} };          // cs.constraint_bounds();
@@ -82,15 +94,15 @@ void CegarTest::FindNoCounterexampleTest::iterate()
 
 bool CegarTest::FindNoCounterexampleTest::check() const
 {
-    auto initialNodes = mpRtree->intersection( mInitial );
+    auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
     auto counterex  = findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end() );
     // system radially diverges
     if( !counterex.empty() &&
 	definitely( !mpRtree->isSafe( counterex.back() ) ) &&
-	definitely( !isSpurious( *mpRtree, counterex.begin(), counterex.end(), initialNodes.begin(), initialNodes.end(), Ariadne::Effort( 10 ) ) )  )
+	definitely( !isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) ) )
     {
 	printCounterexample( *mpRtree, counterex.begin(), counterex.end() );
-	std::cout << "is spurious " << isSpurious( *mpRtree, counterex.begin(), counterex.end(), initialNodes.begin(), initialNodes.end(), Ariadne::Effort( 10 ) ) << std::endl;
+	std::cout << "is spurious " << isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) << std::endl;
 	return false;
     }
     return true;
@@ -100,13 +112,21 @@ CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
 
 void CegarTest::LoopTest::iterate()
 {
-    double boundary = 5, iwid = 1, delta = 0.5;
+    double wid = mInitialBoxLengthDist( mRandom ),
+	hig = mInitialBoxLengthDist( mRandom ),
+	delta = mDeltaDist( mRandom )
+	, boundary = std::max( wid + delta, hig + delta );
 
-    Ariadne::RealConstant w( "w", 1 );
+    std::cout << "initial " << wid << " x " << hig << " within square bound " << boundary << std::endl;
+
+    Ariadne::RealConstant w( "w", Ariadne::Real( wid ) )
+	, h( "h", Ariadne::Real( hig ) ); // must be the same as wid
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
 
-    mpInitial = std::unique_ptr< Ariadne::ConstraintSet >( new Ariadne::ConstraintSet( { cx >= w, cx <= w, cy >= w, cy <= w } ) );
+    mpInitialSet.reset( new Ariadne::ConstraintSet( { cx >= -w, cx <= w, cy >= -h, cy <= h } ) );
+    Ariadne::ExactBoxType initialSetBox = { {-wid, wid}, {-hig, hig} };
+    mpInitialSetBox.reset( new Ariadne::ExactBoxType( initialSetBox ) );
 
     // mWidthDist = std::uniform_real_distribution<>( initial[ 0 ].lower().get_d(), initial[ 0 ].upper().get_d() );
     // mHeightDist = std::uniform_real_distribution<>( initial[ 1 ].lower().get_d(), initial[ 1 ].upper().get_d() );
@@ -118,8 +138,7 @@ void CegarTest::LoopTest::iterate()
     Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
 
     // figure out how to use bounds on safe region to do this
-    Ariadne::ExactBoxType initialAbs = { {std::numeric_limits< double >::min(), boundary + delta }
-					 , {std::numeric_limits< double >::min(), boundary + delta } };          // cs.constraint_bounds();
+    Ariadne::ExactBoxType initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
 
     mpRtree.reset( new ExactRefinementTree( initialAbs, cs, henon, Ariadne::Effort( 10 ) ) );
 }
@@ -128,14 +147,17 @@ bool CegarTest::LoopTest::check() const
 {
     bool foundCounterexample = false;
 
-    Ariadne::RealBox constraintBb = mpInitial->constraint_bounds();
-    std::uniform_real_distribution<> widthDist = std::uniform_real_distribution<>( constraintBb[ 0 ].lower().get_d(), constraintBb[ 0 ].upper().get_d() )
-	, heightDist = std::uniform_real_distribution<>( constraintBb[ 1 ].lower().get_d(), constraintBb[ 1 ].upper().get_d() );
+    std::uniform_real_distribution<> widthDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 0 ].lower().get_d()
+										   , (*mpInitialSetBox)[ 0 ].upper().get_d() )
+	, heightDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 1 ].lower().get_d()
+							 , (*mpInitialSetBox)[ 1 ].upper().get_d() );
 
     std::vector< Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > > counterex;
     for( uint npt = 0; npt < mTestSize && !foundCounterexample; ++npt )
     {
-    	Ariadne::ExactPoint initialPt( { widthDist( mRandom ), heightDist( mRandom ) } );
+	double x = widthDist( mRandom ), y = heightDist( mRandom );
+
+    	Ariadne::ExactPoint initialPt( { x, y } );
 	// refactor this into its own function
 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPt = Ariadne::EffectiveVectorFunction::identity( initialPt.dimension() ).evaluate( initialPt );
 	counterex = {initialPt};
@@ -153,7 +175,9 @@ bool CegarTest::LoopTest::check() const
     	}
     }
 
-    auto cegarCounterex = cegar( *mpRtree, *mpInitial, Ariadne::Effort( 10 ), mRefinement, mLocator, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, MAX_NODES_FACTOR * mTestSize );
+    std::cout << "safety " << cegarCounterex.first << std::endl;
+      
     if( foundCounterexample && definitely( cegarCounterex.first ) )
     {
 	std::cout << "found ";
@@ -162,12 +186,14 @@ bool CegarTest::LoopTest::check() const
 	std::cout << std::endl << "but cegar found nothing" << std::endl;
 	return false;
     }
-    if( !foundCounterexample && definitely( !cegarCounterex.first ) ) // this is just a general note, not an error
+    if( !foundCounterexample && !cegarCounterex.second.empty() )
     {                                                                 // because mapping random points comes with no guarantees
 	std::cout << "cegar found ";
 	printCounterexample( *mpRtree, cegarCounterex.second.begin(), cegarCounterex.second.end() ); // does endl
 	std::cout << "but could not find a point that maps there" << std::endl;
     }
+    // if( definitely( cegarCounterex.first ) ) std::cout << "cegar says: safe system" << std::endl;
+    // else if( cegarCounterex.second.empty() ) std::cout << "cegar presumes: safe system" << std::endl;
 
     return true;
 }
@@ -181,7 +207,7 @@ void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
 }

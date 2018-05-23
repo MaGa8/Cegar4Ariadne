@@ -45,7 +45,7 @@ namespace graph
     //! \return a reference to the value stored in v
     //! \note values are not meant to be modified as nodes are accessed by their values
     template< typename G >
-    const typename DiGraphTraits< G >::ValueT& value( const G& g, const typename DiGraphTraits< G >::ConstVertexT& v );
+    const typename DiGraphTraits< G >::ValueT& value( const G& g, const typename DiGraphTraits< G >::VertexT& v );
 
     template< typename G >
     typename DiGraphTraits< G >::VertexT source( const G& g, typename DiGraphTraits< G >::EdgeT& e );

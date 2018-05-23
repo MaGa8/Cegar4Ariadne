@@ -83,6 +83,8 @@ class RefinementTree
 	return mDynamics;
     }
 
+    const Ariadne::Effort effort() const { return mEffort; }
+
     //! \return tree storing iterative refinements
     const RefinementT& tree() const
     {

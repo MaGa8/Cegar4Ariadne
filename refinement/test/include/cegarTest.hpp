@@ -12,6 +12,9 @@ struct CegarTest : public ITestGroup
 
     static std::default_random_engine mRandom;
 
+    static std::function< Ariadne::ValidatedLowerKleenean( const typename ExactRefinementTree::EnclosureT&
+							   , const Ariadne::ConstraintSet& ) > mIntersectConstraints;
+
     template< typename E >
     static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const IRefinement< E >& refiner )
     {
@@ -41,7 +44,7 @@ struct CegarTest : public ITestGroup
     class FindCounterexampleTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	Ariadne::ExactBoxType mInitial;
+	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
 	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
 	STATEFUL_TEST( FindCounterexampleTest );
     };
@@ -52,7 +55,7 @@ struct CegarTest : public ITestGroup
     class FindNoCounterexampleTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	Ariadne::ExactBoxType mInitial;
+	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
 	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
 	STATEFUL_TEST( FindNoCounterexampleTest );
     };
@@ -62,11 +65,14 @@ struct CegarTest : public ITestGroup
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 20; // because: 50 * 200 = b10,000
+	static const uint MAX_NODES_FACTOR = 500; // because: 50 * 200 = b10,000
+	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 100 )
+	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
+	std::unique_ptr< Ariadne::ConstraintSet > mpInitialSet;
+	std::unique_ptr< Ariadne::ExactBoxType > mpInitialSetBox;
 	LargestSideRefiner< Ariadne::ExactIntervalType > mRefinement;
-	CompleteCounterexample< Ariadne::ExactBoxType > mLocator;
+	CompleteCounterexample< Ariadne::ExactBoxType, typename CounterexampleT< Ariadne::ExactBoxType >::iterator > mLocator;
 
 	STATELESS_TEST( LoopTest );
     };

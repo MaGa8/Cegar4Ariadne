@@ -119,13 +119,22 @@ struct RefinementTreeTest : public ITestGroup
 	STATEFUL_TEST( LeavesTest );
     };
 
-    // test image: brute force all leaves and test for intersection
-    class ImageTest : public ITest
+    // test intersection: brute force all leaves and test for intersection
+    class IntersectionTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
-	STATEFUL_TEST( ImageTest );
+	STATEFUL_TEST( IntersectionTest );
+    };
+
+    // test intersection with random circular constraint set
+    class CSetIntersectionTest : public ITest
+    {
+	std::unique_ptr< ExactRefinementTree > mpRtree;
+	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
+	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	STATEFUL_TEST( CSetIntersectionTest );
     };
     
     // test whether non-leafs are absent from graph
