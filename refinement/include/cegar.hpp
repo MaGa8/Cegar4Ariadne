@@ -4,6 +4,7 @@
 #include "refinementTree.hpp"
 #include "refinement.hpp"
 #include "locator.hpp"
+#include "cegarObserver.hpp"
 
 #include <functional>
 
@@ -32,6 +33,15 @@ class NodeComparator
 
 template< typename E >
 using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
+
+template< typename E >
+using NodeSet = std::set< typename RefinementTree< E >::NodeT, NodeComparator< typename RefinementTree< E >::EnclosureT > >;
+
+template< typename E >
+using ObserverT = CegarObserver< RefinementTree< E >
+				 , typename NodeSet< E >::const_iterator
+				 , typename CounterexampleT< E >::const_iterator
+				 , typename CounterexampleT< E >::const_iterator >;
 
 /*!
   runs DFS to find counterexample
@@ -190,30 +200,52 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 								     , const Ariadne::Effort& effort
 								     , const IRefinement< E >& refinement
 								     , LocatorT locator
-								     , const uint maxNodes )
+								     , const uint maxNodes
+								     , const std::vector< std::shared_ptr< ObserverT< E > > >& observers = {} )
 {
     typedef RefinementTree< E > Rtree;
-    typedef std::set< typename Rtree::NodeT, NodeComparator< Ariadne::ExactBoxType > > NodeSet;
 
     std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > interPred =
 	[effort] (auto& enc, auto& cset) {return cset.overlaps( enc ).check( effort ); };
     
-    NodeSet initialImage = NodeSet( NodeComparator( rtree ) );
+    NodeSet< E > initialImage = NodeSet< E >( NodeComparator( rtree ) );
     {
 	auto img = rtree.intersection( initialSet, interPred );
 	initialImage.insert( img.begin(), img.end() );
     }
+
+    for( auto& pObs : observers )
+	pObs->initialized( rtree, initialImage.begin(), initialImage.end() );
     
     while( rtree.tree().size() < maxNodes )
     {
+	for( auto& pObs : observers )
+	    pObs->searchCounterexample();
+	
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
+
+	for( auto& pObs : observers )
+	    pObs->foundCounterexample( counterexample.begin(), counterexample.end() );
+	
 	if( counterexample.empty() )
 	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
 
-	if( definitely( !isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort ) ) &&
+	for( auto& pObs : observers )
+	    pObs->checkSpurious();
+	
+	Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort );
+
+	for( auto& pObs : observers )
+	    pObs->spurious( spurious );
+	
+	if( definitely( !spurious ) &&
 	    definitely( !rtree.isSafe( counterexample.back() ) ) )
+	{
+	    for( auto& pObs : observers )
+		pObs->finished();
 	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
+	}
 
 	for( const typename Rtree::NodeT& refine : locator( rtree, counterexample.begin(), counterexample.end() ) )
 	{
@@ -222,8 +254,18 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 		const typename Rtree::RefinementT::NodeT& treeNodeRef =
 		    static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
 		auto iRefined = initialImage.find( refine );
-		
+
+		for( auto& pObs : observers )
+		    pObs->startRefinement( refine );
+	
 		rtree.refine( refine, refinement );
+
+		if( !observers.empty() )
+		{
+		    auto refinedNodes = rtree.leaves( treeNodeRef );
+		    for( auto& pObs : observers )
+			pObs->refined( rtree, refinedNodes.begin(), refinedNodes.end() );
+		}
 
 		if( iRefined != initialImage.end() )
 		{
