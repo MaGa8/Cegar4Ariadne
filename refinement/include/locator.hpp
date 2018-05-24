@@ -73,18 +73,18 @@ struct LargestBox : public ILocator< Ariadne::Box< IntervalT >, IterT >
 {
     typedef ILocator< Ariadne::Box< IntervalT >, IterT > BaseT;
     LOC_DEFS;
-    
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend ) const
+
+    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
     {
 	auto imax = std::max_element( ibegin, iend
 				      , [&rtree] (const typename RefinementTree< EnclosureT >::NodeT& n1
 						  , const typename RefinementTree< EnclosureT >::NodeT& n2) {
 					  auto val1 = rtree.nodeValue( n1 ), val2 = rtree.nodeValue( n2 );
-					  if( !n1 )
+					  if( !val1 )
 					      return true;
-					  if( !n2 )
+					  if( !val2 )
 					      return false;
-					  return val1.value().get().getEnclosure().measure() < val2.value().get().getEnclosure().measure();
+					  return definitely( val1.value().get().getEnclosure().measure() < val2.value().get().getEnclosure().measure() );
 					  } );
 	return { *imax };
     }
@@ -102,9 +102,15 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
 	, mRandom( std::default_random_engine( std::random_device()() ) )
     {}
 
-    auto randomPoint( const EnclosureT& bx ) -> decltype( bx.lower_bounds() + bx.upper_bounds() )
+    EnclosureT randomPointBox( const EnclosureT& bx )
     {
-	return bx.lower_bounds() + mDist( mRandom ) * bx.upper_bounds();
+	auto pt = bx.lower_bounds() + mDist( mRandom ) * bx.upper_bounds();
+
+	Ariadne::Array< Ariadne::ExactIntervalType > intervals( pt.size() );
+	std::transform( pt.array().begin(), pt.array().end(), intervals.begin()
+			, [] (const Ariadne::Approximation< Ariadne::FloatDP >& x) {
+			    return Ariadne::ExactIntervalType( cast_exact( x ), cast_exact( x ) ); } );
+	return EnclosureT( Ariadne::Vector( intervals ) );
     }
 
     double safeUnsafeScore( const RefinementTree< EnclosureT >& rtree, const EnclosureT& bx )
@@ -112,7 +118,7 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
 	uint safe = 0, unsafe = 0;
 	for( uint cSample = 0; cSample < mNoSamples; ++cSample )
 	{
-	    auto sample = randomPoint( bx );
+	    auto sample = randomPointBox( bx );
 	    if( definitely( rtree.constraints().covers( Ariadne::Box< IntervalT >( sample ) ) ) )
 		++safe;
 	    else
@@ -122,15 +128,18 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
 	    , unsafeRatio = unsafe / static_cast< const double& >( mNoSamples );
 	return -safeRatio*std::log( safeRatio ) - unsafeRatio*std::log( unsafeRatio );
     }
-    
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT& ibegin, const IteratorT& iend )
+
+    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
     {
 	std::vector< double > scores( std::distance( ibegin, iend ) );
 	std::transform( ibegin, iend, scores.begin()
 			, [&rtree, this] (const typename RefinementTree< EnclosureT >::NodeT& n) {
-			    return safeUnsafeScore( rtree, n ); } );
-	return { *std::advance( ibegin, std::distance( ibegin
-						       , std::max_element( scores.begin(), scores.end() ) ) ) };
+			    auto nval = rtree.nodeValue( n );
+			    if( !nval )
+				return 0.0;
+			    return safeUnsafeScore( rtree, nval.value().get().getEnclosure() ); } );
+	std::advance( ibegin, std::distance( scores.begin(), std::max_element( scores.begin(), scores.end() ) ) );
+	return { *ibegin };
     }
 
   private:

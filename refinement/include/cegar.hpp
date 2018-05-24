@@ -37,12 +37,6 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 template< typename E >
 using NodeSet = std::set< typename RefinementTree< E >::NodeT, NodeComparator< typename RefinementTree< E >::EnclosureT > >;
 
-template< typename E >
-using ObserverT = CegarObserver< RefinementTree< E >
-				 , typename NodeSet< E >::const_iterator
-				 , typename CounterexampleT< E >::const_iterator
-				 , typename CounterexampleT< E >::const_iterator >;
-
 /*!
   runs DFS to find counterexample
   any path terminates in
@@ -194,14 +188,14 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E, typename LocatorT >
+template< typename E, typename LocatorT, typename ... TObservers >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::ConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
 								     , const IRefinement< E >& refinement
 								     , LocatorT locator
 								     , const uint maxNodes
-								     , const std::vector< std::shared_ptr< ObserverT< E > > >& observers = {} )
+								     , TObservers ... observers )
 {
     typedef RefinementTree< E > Rtree;
 
@@ -214,36 +208,38 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	initialImage.insert( img.begin(), img.end() );
     }
 
-    for( auto& pObs : observers )
-	pObs->initialized( rtree, initialImage.begin(), initialImage.end() );
+    // fold callInitialized over observers
+    // (callInitialized(observers, rtree), ...);
+    // for( auto& pObs : observers )
+	// pObs->initialized( rtree, initialImage.begin(), initialImage.end() );
     
     while( rtree.tree().size() < maxNodes )
     {
-	for( auto& pObs : observers )
-	    pObs->searchCounterexample();
+	// for( auto& pObs : observers )
+	    // pObs->searchCounterexample();
 	
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 
-	for( auto& pObs : observers )
-	    pObs->foundCounterexample( counterexample.begin(), counterexample.end() );
+	// for( auto& pObs : observers )
+	    // pObs->foundCounterexample( counterexample.begin(), counterexample.end() );
 	
 	if( counterexample.empty() )
 	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
 
-	for( auto& pObs : observers )
-	    pObs->checkSpurious();
+	// for( auto& pObs : observers )
+	    // pObs->checkSpurious();
 	
 	Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort );
 
-	for( auto& pObs : observers )
-	    pObs->spurious( spurious );
+	// for( auto& pObs : observers )
+	    // pObs->spurious( spurious );
 	
 	if( definitely( !spurious ) &&
 	    definitely( !rtree.isSafe( counterexample.back() ) ) )
 	{
-	    for( auto& pObs : observers )
-		pObs->finished();
+	    // for( auto& pObs : observers )
+		// pObs->finished();
 	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
 	}
 
@@ -255,17 +251,17 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 		    static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
 		auto iRefined = initialImage.find( refine );
 
-		for( auto& pObs : observers )
-		    pObs->startRefinement( refine );
+		// for( auto& pObs : observers )
+		// pObs->startRefinement( refine );
 	
 		rtree.refine( refine, refinement );
 
-		if( !observers.empty() )
-		{
-		    auto refinedNodes = rtree.leaves( treeNodeRef );
-		    for( auto& pObs : observers )
-			pObs->refined( rtree, refinedNodes.begin(), refinedNodes.end() );
-		}
+		// if( !observers.empty() )
+		// {
+		auto refinedNodes = rtree.leaves( treeNodeRef );
+		// for( auto& pObs : observers )
+		// pObs->refined( rtree, refinedNodes.begin(), refinedNodes.end() );
+	 
 
 		if( iRefined != initialImage.end() )
 		{
