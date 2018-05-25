@@ -188,14 +188,14 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E, typename LocatorT, typename ... TObservers >
+template< typename E, typename LocatorT, typename ... ObserversT >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::ConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
 								     , const IRefinement< E >& refinement
 								     , LocatorT locator
 								     , const uint maxNodes
-								     , TObservers ... observers )
+								     , ObserversT& ... observers )
 {
     typedef RefinementTree< E > Rtree;
 
@@ -208,38 +208,34 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	initialImage.insert( img.begin(), img.end() );
     }
 
-    // fold callInitialized over observers
-    // (callInitialized(observers, rtree), ...);
-    // for( auto& pObs : observers )
-	// pObs->initialized( rtree, initialImage.begin(), initialImage.end() );
-    
+    (callInitialized(observers, rtree), ...);
+        
     while( rtree.tree().size() < maxNodes )
     {
-	// for( auto& pObs : observers )
-	    // pObs->searchCounterexample();
+	(callStartIteration( observers, rtree ), ... );
+	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
 	
 	// look for counterexample
 	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
 
-	// for( auto& pObs : observers )
-	    // pObs->foundCounterexample( counterexample.begin(), counterexample.end() );
+	(callFoundCounterexample( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
 	
 	if( counterexample.empty() )
+	{
+	    (callFinished( observers, rtree, Ariadne::ValidatedKleenean( true ) ), ... );
 	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
+	}
 
-	// for( auto& pObs : observers )
-	    // pObs->checkSpurious();
+	(callCheckSpurious( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
 	
 	Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort );
 
-	// for( auto& pObs : observers )
-	    // pObs->spurious( spurious );
+	(callSpurious( observers, rtree, counterexample.begin(), counterexample.end(), spurious ), ... );
 	
 	if( definitely( !spurious ) &&
 	    definitely( !rtree.isSafe( counterexample.back() ) ) )
 	{
-	    // for( auto& pObs : observers )
-		// pObs->finished();
+	    (callFinished( observers, rtree, Ariadne::ValidatedKleenean( false ) ), ... );
 	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
 	}
 
@@ -251,16 +247,13 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 		    static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
 		auto iRefined = initialImage.find( refine );
 
-		// for( auto& pObs : observers )
-		// pObs->startRefinement( refine );
+		(callStartRefinement( observers, rtree, refine ), ... );
 	
 		rtree.refine( refine, refinement );
 
-		// if( !observers.empty() )
-		// {
-		auto refinedNodes = rtree.leaves( treeNodeRef );
-		// for( auto& pObs : observers )
-		// pObs->refined( rtree, refinedNodes.begin(), refinedNodes.end() );
+		// find a way to prevent this statement from executing if no observers are passed
+		auto refinedNodes = rtree.leaves( treeNodeRef ); 
+		(callRefined( observers, rtree, refinedNodes.begin(), refinedNodes.end() ), ... );
 	 
 
 		if( iRefined != initialImage.end() )
@@ -272,6 +265,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    }
 	}
     }
+    (callFinished( observers, rtree, Ariadne::ValidatedKleenean( Ariadne::indeterminate ) ), ... );
     return make_pair( Ariadne::ValidatedKleenean( Ariadne::indeterminate ), std::vector< typename Rtree::NodeT >() );
 }
 
