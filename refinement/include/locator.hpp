@@ -9,35 +9,22 @@
 #include <random>
 #include <cmath>
 
-#ifndef LOC_DEFS
-#define LOC_DEFS typedef typename BaseT::EnclosureT EnclosureT; typedef typename BaseT::IteratorT IteratorT; typedef typename BaseT::NodeRefVec NodeRefVec
-#endif
+/*
+  a locator should implement 
+  NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
+  for NodeRefVec = std::vector< std::reference_wrapper< typename Rtree::NodeT > >
+ */
 
-/*!
-  \interface for locator function objects which shall be used to determine the state to refine
-  \param EnclosureT type of enclosure to refine
-  cannot add method to interface because cannot combine virtual methods and template methods
-*/
-template< typename E, typename I >
-struct ILocator
-{
-    typedef E EnclosureT;
-    typedef I IteratorT;
-    typedef std::vector< std::reference_wrapper< typename RefinementTree< EnclosureT >::NodeT > > NodeRefVec;
-
-    virtual NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend ) = 0;
-};
+template< typename Rtree >
+using NodeRefVec = std::vector< std::reference_wrapper< typename Rtree::NodeT > >;
 
 //! \class represents policy of refining all nodes in a counterexample
-template< typename E, typename I >
-struct CompleteCounterexample : public ILocator< E, I >
+struct CompleteCounterexample
 {
-    typedef ILocator< E, I > BaseT;
-    LOC_DEFS;
-    
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
+    template< typename Rtree, typename IterT >
+    NodeRefVec< Rtree > operator ()( const Rtree& rtree, IterT ibegin, const IterT& iend )
     {
-	NodeRefVec ns;
+	NodeRefVec< Rtree > ns;
 	ns.reserve( std::distance( ibegin, iend ) );
 	for( ; ibegin != iend; ++ibegin )
 	    ns.push_back( std::ref( *ibegin ) );
@@ -46,18 +33,15 @@ struct CompleteCounterexample : public ILocator< E, I >
 };
 
 //! \brief selects random state to refine
-template< typename E, typename I >
-class RandomStates : public ILocator< E, I >
+class RandomStates
 {
   public:
-    typedef ILocator< E, I > BaseT;
-    LOC_DEFS;
-    
     RandomStates() : mRandom( std::random_device()() ) {}
 
     RandomStates( const RandomStates& orig ) = default;
     
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
+    template< typename Rtree, typename IterT >
+    NodeRefVec< Rtree > operator ()( const Rtree& rtree, IterT ibegin, const IterT& iend )
     {
 	std::advance( ibegin, mDist( mRandom ) % std::distance( ibegin, iend ) );
 	return { *ibegin };
@@ -68,17 +52,17 @@ class RandomStates : public ILocator< E, I >
 };
 
 //! \brief selects the box with the largest volume
-template< typename IntervalT, typename IterT >
-struct LargestBox : public ILocator< Ariadne::Box< IntervalT >, IterT >
+struct LargestBox
 {
-    typedef ILocator< Ariadne::Box< IntervalT >, IterT > BaseT;
-    LOC_DEFS;
+    template< typename IntervalT >
+    using Rtree = RefinementTree< Ariadne::Box< IntervalT > >;
 
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
+    template< typename IntervalT, typename IterT >
+    NodeRefVec< Rtree< IntervalT > > operator ()( const Rtree< IntervalT >& rtree, IterT ibegin, const IterT& iend )
     {
 	auto imax = std::max_element( ibegin, iend
-				      , [&rtree] (const typename RefinementTree< EnclosureT >::NodeT& n1
-						  , const typename RefinementTree< EnclosureT >::NodeT& n2) {
+				      , [&rtree] (const typename Rtree< IntervalT >::NodeT& n1
+						  , const typename Rtree< IntervalT >::NodeT& n2) {
 					  auto val1 = rtree.nodeValue( n1 ), val2 = rtree.nodeValue( n2 );
 					  if( !val1 )
 					      return true;
@@ -90,19 +74,19 @@ struct LargestBox : public ILocator< Ariadne::Box< IntervalT >, IterT >
     }
 };
 
-template< typename IntervalT, typename IterT >
-class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
+template< size_t NSamples >
+class MaximumEntropy
 {
   public:
-    typedef ILocator< Ariadne::Box< IntervalT >, IterT > BaseT;
-    LOC_DEFS;
+    template< typename IntervalT >
+    using Rtree = RefinementTree< Ariadne::Box< IntervalT > >;
 
-    MaximumEntropy( const uint& noSamples )
-	: mNoSamples( noSamples )
-	, mRandom( std::default_random_engine( std::random_device()() ) )
+    MaximumEntropy()
+	: mRandom( std::default_random_engine( std::random_device()() ) )
     {}
 
-    EnclosureT randomPointBox( const EnclosureT& bx )
+    template< typename IntervalT >
+    typename Rtree< IntervalT >::EnclosureT randomPointBox( const Ariadne::Box< IntervalT >& bx )
     {
 	auto pt = bx.lower_bounds() + mDist( mRandom ) * bx.upper_bounds();
 
@@ -110,13 +94,14 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
 	std::transform( pt.array().begin(), pt.array().end(), intervals.begin()
 			, [] (const Ariadne::Approximation< Ariadne::FloatDP >& x) {
 			    return Ariadne::ExactIntervalType( cast_exact( x ), cast_exact( x ) ); } );
-	return EnclosureT( Ariadne::Vector( intervals ) );
+	return typename Rtree< IntervalT >::EnclosureT( Ariadne::Vector( intervals ) );
     }
 
-    double safeUnsafeScore( const RefinementTree< EnclosureT >& rtree, const EnclosureT& bx )
+    template< typename IntervalT >
+    double safeUnsafeScore( const Rtree< IntervalT >& rtree, const Ariadne::Box< IntervalT >& bx )
     {
 	uint safe = 0, unsafe = 0;
-	for( uint cSample = 0; cSample < mNoSamples; ++cSample )
+	for( uint cSample = 0; cSample < NSamples; ++cSample )
 	{
 	    auto sample = randomPointBox( bx );
 	    if( definitely( rtree.constraints().covers( Ariadne::Box< IntervalT >( sample ) ) ) )
@@ -124,16 +109,17 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
 	    else
 		++unsafe;
 	}
-	double safeRatio = safe / static_cast< const double& >( mNoSamples )
-	    , unsafeRatio = unsafe / static_cast< const double& >( mNoSamples );
+	double safeRatio = safe / static_cast< const double& >( NSamples )
+	    , unsafeRatio = unsafe / static_cast< const double& >( NSamples );
 	return -safeRatio*std::log( safeRatio ) - unsafeRatio*std::log( unsafeRatio );
     }
 
-    NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
+    template< typename IntervalT, typename IterT >
+    NodeRefVec< Rtree< IntervalT > > operator ()( const Rtree< IntervalT >& rtree, IterT ibegin, const IterT& iend )
     {
 	std::vector< double > scores( std::distance( ibegin, iend ) );
 	std::transform( ibegin, iend, scores.begin()
-			, [&rtree, this] (const typename RefinementTree< EnclosureT >::NodeT& n) {
+			, [&rtree, this] (const typename Rtree< IntervalT >::NodeT& n) {
 			    auto nval = rtree.nodeValue( n );
 			    if( !nval )
 				return 0.0;
@@ -143,11 +129,8 @@ class MaximumEntropy : public ILocator< Ariadne::Box< IntervalT >, IterT >
     }
 
   private:
-    uint mNoSamples;
     std::uniform_real_distribution<> mDist;
     std::default_random_engine mRandom;
 };
-
-#undef LOC_DEFS
 
 #endif

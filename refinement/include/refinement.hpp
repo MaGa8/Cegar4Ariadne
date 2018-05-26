@@ -3,18 +3,21 @@
 
 #include "geometry/box.hpp"
 
-//! \interface for refinement strategies subdividing a box into smaller boxes
-template< typename E >
-struct IRefinement
-{
-    virtual std::vector< E > refine( const E& b ) const = 0;
-};
+/*
+  Refinement classes represent a procedure for subdividing enclosures of one type into smaller enclosures of the same type.
+  They should provide
+  template< typename E > operator ()( const E& enclosure )
+ */
 
 //! \class refine along the coordinate of the largest interval
-template< typename IntervalT >
-struct LargestSideRefiner : public IRefinement< Ariadne::Box< IntervalT > >
+struct LargestSideRefiner
 {
-    std::vector< Ariadne::Box< IntervalT > > refine( const Ariadne::Box< IntervalT >& b ) const
+
+    template< typename E >
+    std::vector< E > operator ()( const E& b ) const;
+
+    template< typename IntervalT >
+    std::vector< Ariadne::Box< IntervalT > > operator ()( const Ariadne::Box< IntervalT >& b ) const
     {
 	Ariadne::Pair< Ariadne::Box< IntervalT >, Ariadne::Box< IntervalT > > splits = b.split();
 	return std::vector< Ariadne::Box< IntervalT > >( {splits.first, splits.second} );

@@ -110,7 +110,7 @@ void RefinementTreeTest::LeavesTest::init()
 void RefinementTreeTest::LeavesTest::iterate()
 {
     D( std::cout << "leaves test iterate" << std::endl; );
-    LargestSideRefiner< Ariadne::ExactIntervalType > refiner;
+    LargestSideRefiner refiner;
     refineRandomLeaf( *mpRtree, refiner );
     ++mExpansionCounter;
 }

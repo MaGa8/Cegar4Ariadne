@@ -43,8 +43,8 @@ struct RefinementTreeTest : public ITestGroup
 	const RefinementTree< E >& mRtree;
     };
 
-    template< typename E >
-    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const IRefinement< E >& refiner )
+    template< typename E, typename R >
+    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
 	auto ls = rt.leaves();
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
@@ -56,7 +56,7 @@ struct RefinementTreeTest : public ITestGroup
     template< typename E >
     static void refineEqualDepth( RefinementTree< E >& rt, const uint depth )
     {
-	LargestSideRefiner< E > refiner;
+	LargestSideRefiner refiner;
 	for( uint i = 0; i < depth; ++i )
 	{
 	    auto lvs = rt.leaves();
@@ -103,7 +103,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpBox;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	const uint EXPANSION_SIZE;
 	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
 	STATEFUL_TEST( ExpansionTest );
@@ -124,7 +124,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( IntersectionTest );
     };
 
@@ -133,7 +133,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( CSetIntersectionTest );
     };
     
@@ -142,7 +142,7 @@ struct RefinementTreeTest : public ITestGroup
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( NonLeafRemovalTest );
 	
     };
@@ -153,7 +153,7 @@ struct RefinementTreeTest : public ITestGroup
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	typename ExactRefinementTree::NodeT mRefined;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( PreimageTest );
     };
 
@@ -163,7 +163,7 @@ struct RefinementTreeTest : public ITestGroup
     	std::unique_ptr< ExactRefinementTree > mpRtree;
     	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
     	typename ExactRefinementTree::NodeT mRefined;
-    	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+    	LargestSideRefiner mRefiner;
     	STATEFUL_TEST( PostimageTest );
     };
     
@@ -171,7 +171,7 @@ struct RefinementTreeTest : public ITestGroup
     class AlwaysUnsafeTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	LargestSideRefiner< Ariadne::ExactIntervalType > mRefiner;
+	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( AlwaysUnsafeTest );
     };
 

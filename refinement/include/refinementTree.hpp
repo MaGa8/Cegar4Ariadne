@@ -306,7 +306,8 @@ class RefinementTree
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
     */
-    void refine( const NodeT& v, const IRefinement< E >& r )
+    template< typename R >
+    void refine( const NodeT& v, const R& r )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
 	// interior node cannot be refined -> do nothing
@@ -317,7 +318,7 @@ class RefinementTree
     	typename RefinementT::NodeT treev = inGval.treeNode();
     	EnclosureT obox = tree::value( mRefinements, treev )->getEnclosure();
 	// make new tree values
-    	std::vector< EnclosureT > refined = r.refine( obox );
+    	std::vector< EnclosureT > refined = r( obox );
     	std::array< std::shared_ptr< InteriorTreeValue< EnclosureT > >, RefinementT::N > tvals;
 	for( uint i = 0; i < refined.size(); ++i )
 	{

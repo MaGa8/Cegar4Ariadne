@@ -188,11 +188,11 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E, typename LocatorT, typename ... ObserversT >
+template< typename E, typename RefinementT, typename LocatorT, typename ... ObserversT >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::ConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
-								     , const IRefinement< E >& refinement
+								     , const RefinementT& refinement
 								     , LocatorT locator
 								     , const uint maxNodes
 								     , ObserversT& ... observers )
@@ -239,7 +239,9 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
 	}
 
-	for( const typename Rtree::NodeT& refine : locator( rtree, counterexample.begin(), counterexample.end() ) )
+	std::vector< std::reference_wrapper< typename Rtree::NodeT > > nodesToRefine = locator( rtree, counterexample.begin(), counterexample.end() );
+
+	for( const typename Rtree::NodeT& refine : nodesToRefine )
 	{
 	    if( rtree.nodeValue( refine ) )
 	    {
