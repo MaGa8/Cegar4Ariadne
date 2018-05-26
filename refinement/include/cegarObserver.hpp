@@ -28,10 +28,14 @@ struct CegarObserver
     //! \brief immediatly called before the refinement tree is searched for counterexamples
     template< typename Rtree, typename IterT >
     void searchCounterexample( const Rtree& rtree, IterT iAbstractionsBegin, const IterT& iAbstractionsEnd ) {}
+
+    //! \brief immediatly called after search terminated
+    template< typename Rtree >
+    void searchTerminated( const Rtree& rtree ) {}
     
     //! \brief called immediatly after a counterexample has been found
     template< typename Rtree, typename IterT >
-    void foundCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd ) {}
+    void processCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd ) {}
 
     //! \brief called immediatly before counterexample is checked
     template< typename Rtree, typename IterT >
@@ -71,12 +75,18 @@ void callSearchCounterexample( ObserverT& obs, const Rtree& rtree, const IterT& 
 {
     obs.searchCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd );
 }
-    
+
+template< typename ObserverT, typename Rtree >
+void callSearchTerminated( ObserverT& obs, const Rtree& rtree )
+{
+    obs.searchTerminated( rtree );
+}
+
 //! \brief called immediatly after a counterexample has been found
 template< typename ObserverT, typename Rtree, typename IterT >
-void callFoundCounterexample( ObserverT& obs, const Rtree& rtree, const IterT& iCounterexBegin, const IterT& iCounterexEnd )
+void callProcessCounterexample( ObserverT& obs, const Rtree& rtree, const IterT& iCounterexBegin, const IterT& iCounterexEnd )
 {
-    obs.foundCounterexample( rtree, iCounterexBegin, iCounterexEnd );
+    obs.processCounterexample( rtree, iCounterexBegin, iCounterexEnd );
 }
 
 //! \brief called immediatly before counterexample is checked
@@ -152,8 +162,8 @@ class CegarTimer : public CegarObserver
     }
     
     //! \brief called immediatly after a counterexample has been found
-    template< typename Rtree, typename IterT >
-    void foundCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+    template< typename Rtree >
+    void searchTerminated( const Rtree& rtree )
     {
 	measurement( mLastMethodCall, mSearch );
     }
@@ -223,7 +233,7 @@ class IterationCounter : public CegarObserver
     uint mIterations;
 };
 
-struct DebugOutput
+struct DebugOutput : public CegarObserver
 {
     //! \brief called immediatly after the set of initial nodes has been determined, before the start of the loop
     template< typename Rtree >
@@ -245,12 +255,19 @@ struct DebugOutput
     {
 	std::cout << "start searching for counterexample" << std::endl;
     }
+
+    //! \brief immediatly called after search terminated
+    template< typename Rtree >
+    void searchTerminated( const Rtree& rtree )
+    {
+	std::cout << "search for counterexamples stopped " << std::endl;
+    }
     
     //! \brief called immediatly after a counterexample has been found
     template< typename Rtree, typename IterT >
-    void foundCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+    void processCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
     {
-	std::cout << "found counterexample" << std::endl;
+	std::cout << "process counterexample" << std::endl;
     }
 
     //! \brief called immediatly before counterexample is checked

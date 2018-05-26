@@ -12,6 +12,7 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 /* 
    guide class should provide
    
+   void startSearch
    template< typename IterT > void found( IterT beginCounterex, const IterT& endCounterex )
    bool terminateSearch()
    void outOfCounterexamples()
@@ -21,8 +22,9 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 
 /*!
   \class for each counterexample found: randomly decide whether or not to replace the one previously stored
-  keep with probability p^k where 0 < p < 1 and k is the number of counterexamples found so far
-
+  replace with probability p
+  chance of i th counterexample to remain: p^(n - i)
+  to balance: stop search with probability p at each step
  */
 template< typename E >
 class KeepRandomCounterexamples
@@ -32,26 +34,31 @@ class KeepRandomCounterexamples
 	: mP( p )
 	, mDist( 0.0, 1.0 )
 	, mRandom( std::random_device()() )
-	, mSeen( 0 )
+	, mTerminate( false )
     {}
+
+    void startSearch()
+    {
+	mTerminate = false;
+    }
     
     template< typename IterT >
     void found( const IterT& beginCounterex, const IterT& endCounterex )
     {
 	// if search was terminated and new search begins
-	if( mSeen == 0 )
-	    mCounterexample.clear();
-	if( mDist( mRandom ) < std::pow( mP, mSeen ) )
+	if( mCounterexample.empty() || mDist( mRandom ) < mP )
 	    mCounterexample = CounterexampleT< E >( beginCounterex, endCounterex );
-	++mSeen;
+
+	if( mDist( mRandom ) < mP )
+	    mTerminate = true;
     }
 
     void outOfCounterexamples()
     {
-	mSeen = 0;
+	mSearchStopped = true;
     }
 
-    bool terminateSearch() { return mSeen > 500; }
+    bool terminateSearch() { return mTerminate; }
 
     bool hasCounterexample() { return !mCounterexample.empty(); }
 
@@ -67,7 +74,7 @@ class KeepRandomCounterexamples
     CounterexampleT< E > mCounterexample;
     std::uniform_real_distribution<> mDist;
     std::default_random_engine mRandom;
-    uint mSeen;
+    bool mTerminate, mSearchStopped;
 };
 
 
