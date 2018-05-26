@@ -6,6 +6,7 @@
 #include "locator.hpp"
 #include "cegarObserver.hpp"
 
+#include <stack>
 #include <functional>
 
 template< typename E >
@@ -47,13 +48,15 @@ using NodeSet = std::set< typename RefinementTree< E >::NodeT, NodeComparator< t
   \todo add parameter to control ordering of branches in dfs exploration 
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
-template< typename E, typename NodeIterT >
-CounterexampleT< E > findCounterexample( RefinementTree< E >& rtree
+template< typename E, typename NodeIterT, typename GuideT >
+void findCounterexample( RefinementTree< E >& rtree
 					 , NodeIterT iImgBegin, NodeIterT iImgEnd
+					 , GuideT& guide
 					 , const std::vector< typename RefinementTree< E >::NodeT >& path = {} )
 {
     typedef RefinementTree< E > Rtree;
-    for( ; iImgBegin != iImgEnd; ++iImgBegin )
+
+    while( iImgBegin != iImgEnd && !guide.terminateSearch() )
     {
 	auto iLoop = std::find_if( path.begin(), path.end()
 				   , std::bind( &RefinementTree< E >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
@@ -63,16 +66,19 @@ CounterexampleT< E > findCounterexample( RefinementTree< E >& rtree
 	    copyPath.push_back( *iImgBegin );
 	    // counterexample found (could not happen if node was visited before)
 	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
-		return copyPath;
-
-	    // recurse & return
-	    auto posts =  rtree.postimage( *iImgBegin );
-	    CounterexampleT< E > cex = findCounterexample( rtree, posts.begin(), posts.end(), copyPath );
-	    if( !cex.empty() )
-		return cex;
+	    {
+		guide.found( copyPath.begin(), copyPath.end() );
+		// return copyPath;
+	    }
+	    else
+	    {
+		auto posts =  rtree.postimage( *iImgBegin );
+		findCounterexample( rtree, posts.begin(), posts.end(), guide, copyPath );
+	    }
 	}
+	++iImgBegin;
     }
-    return {};
+    guide.outOfCounterexamples();
 }
 
 /*! 
@@ -188,12 +194,13 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E, typename RefinementT, typename LocatorT, typename ... ObserversT >
+template< typename E, typename RefinementT, typename LocatorT, template< typename EE > typename GuideT, typename ... ObserversT >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::ConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
 								     , const RefinementT& refinement
 								     , LocatorT locator
+								     , GuideT< E > guide
 								     , const uint maxNodes
 								     , ObserversT& ... observers )
 {
@@ -216,53 +223,56 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
 	
 	// look for counterexample
-	auto counterexample = findCounterexample( rtree, initialImage.begin(), initialImage.end() );
+	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide );
 
-	(callFoundCounterexample( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
+	// found possibly many counterexamples
+	// (callFoundCounterexample( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
 	
-	if( counterexample.empty() )
+	if( !guide.hasCounterexample() )
 	{
 	    (callFinished( observers, rtree, Ariadne::ValidatedKleenean( true ) ), ... );
 	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
 	}
 
-	(callCheckSpurious( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
-	
-	Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort );
-
-	(callSpurious( observers, rtree, counterexample.begin(), counterexample.end(), spurious ), ... );
-	
-	if( definitely( !spurious ) &&
-	    definitely( !rtree.isSafe( counterexample.back() ) ) )
+	while( guide.hasCounterexample() )
 	{
-	    (callFinished( observers, rtree, Ariadne::ValidatedKleenean( false ) ), ... );
-	    return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
-	}
+	    auto counterexample = guide.obtain();
+	    (callCheckSpurious( observers, rtree, counterexample.begin(), counterexample.end() ), ... );
+	
+	    Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.begin(), counterexample.end(), initialSet, effort );
 
-	std::vector< std::reference_wrapper< typename Rtree::NodeT > > nodesToRefine = locator( rtree, counterexample.begin(), counterexample.end() );
-
-	for( const typename Rtree::NodeT& refine : nodesToRefine )
-	{
-	    if( rtree.nodeValue( refine ) )
+	    (callSpurious( observers, rtree, counterexample.begin(), counterexample.end(), spurious ), ... );
+	
+	    if( definitely( !spurious ) &&
+		definitely( !rtree.isSafe( counterexample.back() ) ) )
 	    {
-		const typename Rtree::RefinementT::NodeT& treeNodeRef =
-		    static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
-		auto iRefined = initialImage.find( refine );
+		(callFinished( observers, rtree, Ariadne::ValidatedKleenean( false ) ), ... );
+		return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample );
+	    }
 
-		(callStartRefinement( observers, rtree, refine ), ... );
-	
-		rtree.refine( refine, refinement );
-
-		// find a way to prevent this statement from executing if no observers are passed
-		auto refinedNodes = rtree.leaves( treeNodeRef ); 
-		(callRefined( observers, rtree, refinedNodes.begin(), refinedNodes.end() ), ... );
-	 
-
-		if( iRefined != initialImage.end() )
+	    std::vector< std::reference_wrapper< typename Rtree::NodeT > > nodesToRefine = locator( rtree, counterexample.begin(), counterexample.end() );
+	    for( const typename Rtree::NodeT& refine : nodesToRefine )
+	    {
+		if( rtree.nodeValue( refine ) )
 		{
-		    initialImage.erase( iRefined );
-		    auto refinedInitials = rtree.intersection( treeNodeRef, initialSet, interPred );
-		    initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
+		    const typename Rtree::RefinementT::NodeT& treeNodeRef =
+			static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
+		    auto iRefined = initialImage.find( refine );
+
+		    (callStartRefinement( observers, rtree, refine ), ... );
+	
+		    rtree.refine( refine, refinement );
+
+		    // find a way to prevent this statement from executing if no observers are passed
+		    auto refinedNodes = rtree.leaves( treeNodeRef ); 
+		    (callRefined( observers, rtree, refinedNodes.begin(), refinedNodes.end() ), ... );
+	 
+		    if( iRefined != initialImage.end() )
+		    {
+			initialImage.erase( iRefined );
+			auto refinedInitials = rtree.intersection( treeNodeRef, initialSet, interPred );
+			initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
+		    }
 		}
 	    }
 	}

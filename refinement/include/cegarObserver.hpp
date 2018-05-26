@@ -223,5 +223,71 @@ class IterationCounter : public CegarObserver
     uint mIterations;
 };
 
+struct DebugOutput
+{
+    //! \brief called immediatly after the set of initial nodes has been determined, before the start of the loop
+    template< typename Rtree >
+    void initialized( const Rtree& rtree )
+    {
+	std::cout << "cegar initialized" << std::endl;
+    }
+
+    //! \brief first statement called in loop
+    template< typename Rtree >
+    void startIteration( const Rtree& rtree )
+    {
+	std::cout << "start iteration: tree of size " << rtree.tree().size() << std::endl;
+    }
+
+    //! \brief immediatly called before the refinement tree is searched for counterexamples
+    template< typename Rtree, typename IterT >
+    void searchCounterexample( const Rtree& rtree, IterT iAbstractionsBegin, const IterT& iAbstractionsEnd )
+    {
+	std::cout << "start searching for counterexample" << std::endl;
+    }
+    
+    //! \brief called immediatly after a counterexample has been found
+    template< typename Rtree, typename IterT >
+    void foundCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+    {
+	std::cout << "found counterexample" << std::endl;
+    }
+
+    //! \brief called immediatly before counterexample is checked
+    template< typename Rtree, typename IterT >
+    void checkSpurious( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+    {
+	std::cout << "check if spurious" << std::endl;
+    }
+
+    //! \brief called immediatly after counterexample has been checked
+    template< typename Rtree, typename IterT >
+    void spurious( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd, const Ariadne::ValidatedUpperKleenean& spurious )
+    {
+	std::cout << "determined if spurious " << std::endl;
+    }
+
+    //! \brief called immediatly before abstraction is refined
+    template< typename Rtree >
+    void startRefinement( const Rtree& rtree, const typename Rtree::NodeT& toRefine )
+    {
+	std::cout << "start refinement " << std::endl;
+    }
+    
+    //! \brief called immediatly after an abstraction has been refined
+    template< typename Rtree, typename IterT >
+    void refined( const Rtree& rtree, IterT iRefinedBegin, const IterT& iRefinedEnd )
+    {
+	std::cout << "performed refinement " << std::endl;
+    }
+
+    //! \brief last statement before return
+    template< typename Rtree >
+    void finished( const Rtree& rtree, const Ariadne::ValidatedKleenean safe )
+    {
+	std::cout << "cegar terminated " << std::endl;
+    }
+};
+
 
 #endif
