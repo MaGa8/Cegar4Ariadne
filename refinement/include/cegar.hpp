@@ -56,6 +56,9 @@ void findCounterexample( RefinementTree< E >& rtree
 {
     typedef RefinementTree< E > Rtree;
 
+    // std::stack< std::pair< NodeIterT, NodeIterT > > iterStack;
+    // while( !iterStack.empty() && !guide.terminateSearch()
+
     while( iImgBegin != iImgEnd && !guide.terminateSearch() )
     {
 	auto iLoop = std::find_if( path.begin(), path.end()
@@ -223,6 +226,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
 	
 	// look for counterexample
+	guide.startSearch(); // move this to find counterexample once search is no longer recursive
 	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide );
 
 	// found possibly many counterexamples
