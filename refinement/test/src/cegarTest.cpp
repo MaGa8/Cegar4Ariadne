@@ -1,10 +1,6 @@
 #include "cegarTest.hpp"
 #include "testMacros.hpp"
 
-#include "expression/space.hpp"
-#include "expression/expression.hpp"
-#include "function/function.hpp"
-
 #include <limits>
 
 #ifndef DEBUG
@@ -110,6 +106,93 @@ bool CegarTest::FindNoCounterexampleTest::check() const
     return true;
 }
 
+CegarTest::TEST_CTOR( InitialAbstraction, "initial abstractions are complete and only complete" );
+
+void CegarTest::InitialAbstraction::iterate()
+{
+    double wid = mInitialBoxLengthDist( mRandom )
+	, hig = mInitialBoxLengthDist( mRandom )
+	, delta = mDeltaDist( mRandom );
+
+    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid + delta, hig + delta
+									 , safeSetWidth, safeSetWidth
+									 , 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+
+    Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+    Ariadne::RealConstant w = constant( "w", wid )
+	, h = constant( "h", hig )
+	, zero = constant( "zero", 0.0 );
+    
+    // problem: this test is safe by construction, because the initial set is equal to the initial abstraction
+    // so any refinement thereof is in the initial set and hence no incorrect value ever occurs
+
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid}, {0, hig} },
+							   { zero <= cx <= w, zero <= cy <= h } ) );
+}
+
+bool CegarTest::InitialAbstraction::check() const
+{
+    Ariadne::Effort effort( 10 );
+    CheckInitialSet checkObs( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort );
+    PrintInitialSet iniPrint;
+
+    std::cout << "initial set " << *mpInitialSet << std::endl;
+    cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, iniPrint );
+    if( checkObs.mpIssue )
+    {
+	std::cout << "found " << *checkObs.mpIssue << " in initial set, even though it is not in " << *mpInitialSet << std::endl;
+	return false;
+    }
+    return true;
+}
+
+CegarTest::TEST_CTOR( VerifySafety, "verify safe by construction system" );
+
+void CegarTest::VerifySafety::iterate()
+{
+    double wid = mInitialBoxLengthDist( mRandom )
+	, hig = mInitialBoxLengthDist( mRandom )
+	, delta = mDeltaDist( mRandom )
+	, boundary = std::max( wid + delta, hig + delta )
+	, attraction = mAttractionDist( mRandom );
+
+    Ariadne::RealConstant w( "w", Ariadne::Real( wid ) )
+	, h( "h", Ariadne::Real( hig ) );
+    Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+
+    mpInitialSet.reset( new Ariadne::ConstraintSet( { -w <= cx <= w, -h <= cy <= h } ) );
+
+    Ariadne::RealVariable x( "x" ), y( "y" );
+    Ariadne::RealConstant a( "a", Ariadne::Real( attraction ) );
+    Ariadne::EffectiveVectorFunction insideMap = Ariadne::make_function( {x, y}, {a*x, a*y} );
+
+    Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
+
+    // figure out how to use bounds on safe region to do this
+    Ariadne::ExactBoxType initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
+
+    mpRtree.reset( new ExactRefinementTree( initialAbs, cs, insideMap, Ariadne::Effort( 10 ) ) );
+}
+
+bool CegarTest::VerifySafety::check() const
+{
+    PrintInitialSet iniPrint;
+
+    std::cout << "initial set " << *mpInitialSet << std::endl;
+    
+    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize, iniPrint );
+    if( !definitely( cegarResult.first ) )
+    {
+	std::cout << "could not verify safety of system safe by construction, safety " << cegarResult.first
+		  << " after expanding " << mpRtree->tree().size() << " nodes "
+		  << std::endl;
+	return false;
+    }
+    return true;
+}
+
 CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
 
 void CegarTest::LoopTest::iterate()
@@ -119,42 +202,30 @@ void CegarTest::LoopTest::iterate()
 	delta = mDeltaDist( mRandom )
 	, boundary = std::max( wid + delta, hig + delta );
 
-    // std::cout << "initial " << wid << " x " << hig << " within square bound " << boundary << std::endl;
+    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid, hig, boundary, boundary, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
 
-    Ariadne::RealConstant w( "w", Ariadne::Real( wid ) )
-	, h( "h", Ariadne::Real( hig ) ); // must be the same as wid
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+    Ariadne::RealConstant w = constant( "w", wid )
+	, h = constant( "h", hig )
+	, zero = constant( "zero", 0.0 );
 
-    mpInitialSet.reset( new Ariadne::ConstraintSet( { cx >= -w, cx <= w, cy >= -h, cy <= h } ) );
-    Ariadne::ExactBoxType initialSetBox = { {-wid, wid}, {-hig, hig} };
-    mpInitialSetBox.reset( new Ariadne::ExactBoxType( initialSetBox ) );
-
-    // mWidthDist = std::uniform_real_distribution<>( initial[ 0 ].lower().get_d(), initial[ 0 ].upper().get_d() );
-    // mHeightDist = std::uniform_real_distribution<>( initial[ 1 ].lower().get_d(), initial[ 1 ].upper().get_d() );
-
-    Ariadne::RealVariable x( "x" ), y( "y" );
-    Ariadne::RealConstant a( "a", Ariadne::Real( 1.4 ) ), b( "b", Ariadne::Real( 0.3 ) );
-    Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - a*x*x + y, b*x} );
-
-    Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
-
-    // figure out how to use bounds on safe region to do this
-    Ariadne::ExactBoxType initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
-
-    mpRtree.reset( new ExactRefinementTree( initialAbs, cs, henon, Ariadne::Effort( 10 ) ) );
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid}, {0, hig} },
+							   { zero <= cx <= w, zero <= cy <= h } ) );
 }
 
 bool CegarTest::LoopTest::check() const
 {
-    std::uniform_real_distribution<>
-	widthDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 0 ].lower().get_d()
-						      , (*mpInitialSetBox)[ 0 ].upper().get_d() )
-	, heightDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 1 ].lower().get_d()
-							 , (*mpInitialSetBox)[ 1 ].upper().get_d() );
+    Ariadne::UpperBoxType initialBb = mpInitialSet->bounding_box();
+    std::uniform_real_distribution<> widthDist = std::uniform_real_distribution<>( initialBb[ 0 ].lower().get_d()
+										   , initialBb[ 0 ].upper().get_d() )
+	, heightDist = std::uniform_real_distribution<>( initialBb[ 1 ].lower().get_d()
+							 , initialBb[ 1 ].upper().get_d() );
+
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
-    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() )
+				 , Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
 
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
@@ -183,16 +254,15 @@ bool CegarTest::LoopTest::check() const
     return true;
 }
 
-
-
-
 CegarTest::GROUP_CTOR( CegarTest, "top level cegar functions" )
 
 void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
+    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    // addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    // addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
 }

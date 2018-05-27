@@ -51,8 +51,6 @@ class KeepRandomCounterexamples
 
 	if( mDist( mRandom ) < mP )
 	    mTerminate = true;
-	else
-	    std::cout << "guide wants more! " << std::endl;
     }
 
     void outOfCounterexamples()

@@ -5,6 +5,11 @@
 #include "cegar.hpp"
 #include "guide.hpp"
 
+#include "expression/space.hpp"
+#include "expression/expression.hpp"
+#include "function/function.hpp"
+// #include "function/function_set.hpp"
+
 #include <random>
 
 struct CegarTest : public ITestGroup
@@ -26,17 +31,24 @@ struct CegarTest : public ITestGroup
 	return n;
     }
 
+    template< typename Rtree >
+    static void printNode( const Rtree& rtree, const typename Rtree::NodeT& n )
+    {
+	auto nVal = rtree.nodeValue( n );
+	if( nVal )
+	    std::cout << nVal.value().get().getEnclosure();
+	else
+	    std::cout << "[outside]";
+	std::cout << " (" << rtree.isSafe( n ) << ") ";
+    }
+    
     template< typename Rtree, typename Iterator >
     static void printCounterexample( const Rtree& rtree, Iterator startCex, const Iterator& endCex )
     {
 	for( ; startCex != endCex; ++startCex )
 	{
-	    auto nVal = rtree.nodeValue( *startCex );
-	    if( nVal )
-		std::cout << nVal.value().get().getEnclosure();
-	    else
-		std::cout << "[outside]";
-	    std::cout << " (" << rtree.isSafe( *startCex ) << ") -> ";
+	    printNode( rtree, *startCex );
+	    std::cout << "-> ";
 	}
 	std::cout << std::endl;
     }
@@ -84,6 +96,32 @@ struct CegarTest : public ITestGroup
 	return {};
     }
 
+    static Ariadne::RealConstant constant( std::string name, double value )
+    {
+	return Ariadne::RealConstant( name, Ariadne::Real( value ) );
+    }
+
+    //! \return refinement tree for henon map with strictly positive initial and safe sets (i.e. left hand bottom corner is origin
+    template< typename BoxType >
+    static RefinementTree< BoxType >* henonMap( double initialWidth, double initialHeight
+						, double safeWidth, double safeHeight
+						, double a, double b, const Ariadne::Effort& e )
+    {
+	Ariadne::RealConstant ws( "ws", Ariadne::Real( safeWidth ) )
+	    , hs( "hs", Ariadne::Real( safeHeight ) );
+	Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+	Ariadne::ConstraintSet safeSet( {0 <= cx <= ws, 0 <= cy <= hs} );
+
+	BoxType initialAbstraction = { {0, initialWidth}, {0, initialHeight} };
+
+	Ariadne::RealVariable x( "x" ), y( "y" );
+	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
+	Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - fa*x*x + y, fb*x} );
+
+	return new RefinementTree< BoxType >( initialAbstraction, safeSet, henon, e );
+    }
+
     // find a counterexample in an obviously unsafe system
     class FindCounterexampleTest : public ITest
     {
@@ -108,32 +146,105 @@ struct CegarTest : public ITestGroup
 
     // no explicit test for isSpurious as it is hard to construct cases where a counterexample is definitely deemed spurious
 
+    struct PrintInitialSet : public CegarObserver
+    {
+	template< typename Rtree, typename IterT >
+	void searchCounterexample( const Rtree& rtree, IterT iBegin, const IterT& iEnd )
+	{
+	    std::cout << "current initial abstractions " << std::endl;
+	    for( ; iBegin != iEnd; ++iBegin )
+	    {
+		printNode( rtree, *iBegin );
+		std::cout << std::endl;
+	    }
+	    std::cout << std::endl;
+	}
+    };
+
+    struct CheckInitialSet : public CegarObserver
+    {
+	typedef ExactRefinementTree Rtree;
+
+	CheckInitialSet( const Rtree& rtree
+			 , const Ariadne::ConstraintSet& initialSet
+			 , const Ariadne::Effort& effort)
+	    : mRtree( rtree )
+	    , mInitialSet( initialSet )
+	    , mEffort( effort )
+	{}
+
+	template< typename IterT >
+	void searchCounterexample( const Rtree& rtree, IterT iBegin, const IterT& iEnd )
+	{
+	    if( !mpIssue )
+	    {
+		for( ; iBegin != iEnd; ++iBegin )
+		{
+		    auto nval = mRtree.nodeValue( *iBegin );
+		    if( nval)
+		    {
+			const typename Rtree::EnclosureT& enc = nval.value().get().getEnclosure();
+			if( definitely( mInitialSet.separated( enc ) ) ) 
+			    mpIssue.reset( new typename Rtree::EnclosureT( enc ) );
+		    }
+		}
+	    }
+	}
+
+	const Rtree& mRtree;
+	Ariadne::ConstraintSet mInitialSet;
+	Ariadne::Effort mEffort;
+	std::unique_ptr< typename Rtree::EnclosureT > mpIssue;
+    };
+    
+    // test that initial abstractions are updated correctly
+    class InitialAbstraction : public ITest
+    {
+	const double safeSetWidth = 10;
+	const uint mMaxNodesFactor = 10;
+
+    	std::unique_ptr< ExactRefinementTree > mpRtree;
+    	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
+    	LargestSideRefiner mRefinement;
+    	CompleteCounterexample mLocator;
+    	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+    	std::uniform_real_distribution<> mInitialBoxLengthDist = std::uniform_real_distribution<>( 0, 0.25 );
+	std::exponential_distribution<> mDeltaDist = std::exponential_distribution<>( 1 );
+
+    	STATELESS_TEST( InitialAbstraction );
+    };
+
+    // verify safety of trivially safe system
+    class VerifySafety : public ITest
+    {
+	static const uint MAX_NODES_FACTOR = 20;
+    	std::unique_ptr< ExactRefinementTree > mpRtree;
+    	std::unique_ptr< Ariadne::ConstraintSet > mpInitialSet;
+    	LargestSideRefiner mRefinement;
+    	CompleteCounterexample mLocator;
+	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 10 )
+	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
+	std::uniform_real_distribution<> mAttractionDist = std::uniform_real_distribution( 0.1, 0.9 );
+	
+
+    	STATELESS_TEST( VerifySafety );
+    };
+
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
 	static const uint MAX_NODES_FACTOR = 20; // because: 50 * 200 = b10,000
-	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 100 )
+	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
 	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ConstraintSet > mpInitialSet;
-	std::unique_ptr< Ariadne::ExactBoxType > mpInitialSetBox;
+	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;
 	CompleteCounterexample mLocator;
 	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
 
 	STATELESS_TEST( LoopTest );
     };
-
-    // class VerifySafety : public ITest
-    // {
-    // 	std::unique_ptr< ExactRefinementTree > mpInitialSet;
-    // 	std::unique_ptr< Ariadne::ConstraintSet > mpInitialSet;
-    // 	LargestSideRefiner mRefinement;
-    // 	CompleteCounterexample mLocator;
-    // 	KeepRandomCounterexamples mGuide( 0.1 );
-
-    // 	STATELESS_TEST( VerifySafety );
-    // };
 
     GROUP_CTOR_DECL( CegarTest );
     
