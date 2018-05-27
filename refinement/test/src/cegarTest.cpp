@@ -45,16 +45,14 @@ void CegarTest::FindCounterexampleTest::iterate()
 bool CegarTest::FindCounterexampleTest::check() const
 {
     auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
-    
-    auto counterex = findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end() );
+
+    auto guide = mGuide;
+    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), guide );
     // system radially diverges
-    if( graph::value( mpRtree->leafMapping(), counterex.back() )->isInside() )
-	D( std::cout << "inside" << std::endl; );
-    else
-	D( std::cout << "outside" << std::endl; );
-    if( counterex.empty() )
+    if( !guide.hasCounterexample() )
 	return false;
 
+    auto counterex = guide.obtain();
     if( definitely( !mpRtree->relates( counterex.front(), *mpInitial, mIntersectConstraints ) ) )
     {
 	D( std::cout << "counterexample does not begin in initial set" << std::endl; );
@@ -70,7 +68,7 @@ void CegarTest::FindNoCounterexampleTest::init()
 {
     double boundary = 1.005, delta = -0.006; // cheating a bit, so initial abstraction is within constraint boundary
 
-Ariadne::RealVariable x( "x" ), y( "y" );
+    Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::RealConstant b1( "b1", Ariadne::Real( 3.7 ) ), b2( "b2", Ariadne::Real( 3.8 ) );
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( {x, y}, { b1*x*(1 - x), b2*y*(1 - y)} );
 
@@ -95,15 +93,19 @@ void CegarTest::FindNoCounterexampleTest::iterate()
 bool CegarTest::FindNoCounterexampleTest::check() const
 {
     auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
-    auto counterex  = findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end() );
+    auto guide = mGuide;
+    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), guide );
     // system radially diverges
-    if( !counterex.empty() &&
-	definitely( !mpRtree->isSafe( counterex.back() ) ) &&
-	definitely( !isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) ) )
+    if( guide.hasCounterexample() )
     {
-	printCounterexample( *mpRtree, counterex.begin(), counterex.end() );
-	std::cout << "is spurious " << isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) << std::endl;
-	return false;
+	auto counterex = guide.obtain();
+	if( definitely( !mpRtree->isSafe( counterex.back() ) ) &&
+	    definitely( !isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) ) )
+	{
+	    printCounterexample( *mpRtree, counterex.begin(), counterex.end() );
+	    std::cout << "is spurious " << isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) << std::endl;
+	    return false;
+	}
     }
     return true;
 }
@@ -117,7 +119,7 @@ void CegarTest::LoopTest::iterate()
 	delta = mDeltaDist( mRandom )
 	, boundary = std::max( wid + delta, hig + delta );
 
-    std::cout << "initial " << wid << " x " << hig << " within square bound " << boundary << std::endl;
+    // std::cout << "initial " << wid << " x " << hig << " within square bound " << boundary << std::endl;
 
     Ariadne::RealConstant w( "w", Ariadne::Real( wid ) )
 	, h( "h", Ariadne::Real( hig ) ); // must be the same as wid
@@ -145,55 +147,38 @@ void CegarTest::LoopTest::iterate()
 
 bool CegarTest::LoopTest::check() const
 {
-    bool foundCounterexample = false;
-
-    std::uniform_real_distribution<> widthDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 0 ].lower().get_d()
-										   , (*mpInitialSetBox)[ 0 ].upper().get_d() )
+    std::uniform_real_distribution<>
+	widthDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 0 ].lower().get_d()
+						      , (*mpInitialSetBox)[ 0 ].upper().get_d() )
 	, heightDist = std::uniform_real_distribution<>( (*mpInitialSetBox)[ 1 ].lower().get_d()
 							 , (*mpInitialSetBox)[ 1 ].upper().get_d() );
+    auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
-    std::vector< Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > > counterex;
-    for( uint npt = 0; npt < mTestSize && !foundCounterexample; ++npt )
-    {
-	double x = widthDist( mRandom ), y = heightDist( mRandom );
+    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
 
-    	Ariadne::ExactPoint initialPt( { x, y } );
-	// refactor this into its own function
-	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mappedPt = Ariadne::EffectiveVectorFunction::identity( initialPt.dimension() ).evaluate( initialPt );
-	counterex = {initialPt};
-
-    	for( uint nmap = 0; nmap < mTestSize && !foundCounterexample; ++nmap )
-    	{
-    	    mappedPt = mpRtree->dynamics().evaluate( mappedPt );
-	    counterex.push_back( mappedPt );
-
-	    Ariadne::ExactBoxType mappedBox( mappedPt.dimension() );
-	    for( uint i = 0; i < mappedPt.dimension(); ++i )
-		mappedBox[ i ] = {Ariadne::cast_exact( mappedPt[ i ].lower() ), Ariadne::cast_exact( mappedPt[ i ].upper() )};
-	    if( definitely( mpRtree->constraints().separated( mappedBox ) ) )
-		foundCounterexample = true;
-    	}
-    }
-
-    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, MAX_NODES_FACTOR * mTestSize );
-    std::cout << "safety " << cegarCounterex.first << std::endl;
-      
-    if( foundCounterexample && definitely( cegarCounterex.first ) )
+    if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
 	std::cout << "found ";
-	for_each( counterex.begin(), counterex.end()
+	for_each( unsafeTrajectory.begin(), unsafeTrajectory.end()
 		  , [] (const Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > >& p) {std::cout << p << " -> "; } );
 	std::cout << std::endl << "but cegar found nothing" << std::endl;
 	return false;
     }
-    if( !foundCounterexample && !cegarCounterex.second.empty() )
-    {                                                                 // because mapping random points comes with no guarantees
-	std::cout << "cegar found ";
-	printCounterexample( *mpRtree, cegarCounterex.second.begin(), cegarCounterex.second.end() ); // does endl
-	std::cout << "but could not find a point that maps there" << std::endl;
+    else if( unsafeTrajectory.empty() )
+    {
+	if( definitely( !cegarCounterex.first ) )
+	{                                                                 // because mapping random points comes with no guarantees
+	    std::cout << "cegar found ";
+	    printCounterexample( *mpRtree, cegarCounterex.second.begin(), cegarCounterex.second.end() ); // does endl
+	    std::cout << "but could not find a point that maps there, " << std::endl
+		      << "maybe the number of points sampled should be increased?" << std::endl;
+	}
+	else if( !definitely( cegarCounterex.first ) ) // case: indeterminate
+	{
+	    std::cout << "no points sampled left the initial set but cegar could not verify safety either " << std::endl
+		      << "maybe the maximum number of nodes of cegar should be increased?" << std::endl;
+	}
     }
-    // if( definitely( cegarCounterex.first ) ) std::cout << "cegar says: safe system" << std::endl;
-    // else if( cegarCounterex.second.empty() ) std::cout << "cegar presumes: safe system" << std::endl;
 
     return true;
 }
