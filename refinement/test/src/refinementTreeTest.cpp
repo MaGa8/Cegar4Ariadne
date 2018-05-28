@@ -188,10 +188,6 @@ void RefinementTreeTest::CSetIntersectionTest::init()
 {
     Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
 
-    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
@@ -253,7 +249,7 @@ bool RefinementTreeTest::CSetIntersectionTest::check() const
 	    constraintIntersection.erase( iImg );
 	}
     }
-    if( constraintIntersection.size() >= 1 )
+    if( constraintIntersection.size() > 1 ) // did not remove outside node
     {
 	std::cout << "there are elements returned as intersection which could not be found as leaves" << std::endl;
 	for( const typename ExactRefinementTree::NodeT& n : constraintIntersection )
