@@ -137,15 +137,24 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 
     if( !oBeginCex )
     {
-	std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > covers =
-	    [&effort] (auto& nodeEnc, auto& cset ) {return cset.covers( nodeEnc ).check( effort ); };
+	std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > covers =
+	    [&effort] (auto& nodeEnc, auto& cset ) {return !(cset.separated( nodeEnc ).check( effort ) ); };
 
-	if( definitely( rtree.relates( rtree.outside(), initialSet, covers ) ) ) // passed in outside: tests whether initial box is not covered
-	    return false;
+	//eventually find a place in e.g. RefinementTree for this
+	// Ariadne::List< Ariadne::EffectiveConstraint > outsideConstraints;
+	// for( auto interval : rtree.initialEnclosure().array() )
+	//     outsideConstraints.append(
+				      
+	// ConstraintSet outsideInitialAbstraction
+	// if( 
+
+	//    definitely( rtree.relates( rtree.outside(), initialSet, RefinementTree< E >::mDummyInsidePredicate, covers ) ) )
+	assert( false ); // fix code above to tell how to proceed if initial set and outside node intersect
+	return false;
 	// if( std::any_of( beginImage, endImage, [&rtree, &notCovers] (const typename Rtree::NodeT& n) {
 		    // return possibly( rtree.relates( n, rtree.initialEnclosure(), notCovers ) ); } ) ) 
 	    // return false;
-	else
+	// else
 	    return true;
     }
 
@@ -209,8 +218,8 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 {
     typedef RefinementTree< E > Rtree;
 
-    std::function< Ariadne::ValidatedLowerKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > interPred =
-	[effort] (auto& enc, auto& cset) {return cset.overlaps( enc ).check( effort ); };
+    std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > interPred =
+	[effort] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( effort ) ); };
     
     NodeSet< E > initialImage = NodeSet< E >( NodeComparator( rtree ) );
     {

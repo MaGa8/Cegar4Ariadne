@@ -26,19 +26,17 @@ RefinementTreeTest::ExpansionTest::ExpansionTest( uint testSize, uint reps)
 void RefinementTreeTest::ExpansionTest::init()
 {
     D( std::cout << "expansion test init" << std::endl; );
-    mpBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
+    
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
 
     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-    // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
-    Ariadne::EffectiveConstraintSet cs = { c1 };
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-    mpRtree.reset( new ExactRefinementTree( *mpBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
     iterate();
 }
 
@@ -90,19 +88,16 @@ RefinementTreeTest::TEST_CTOR( LeavesTest, "number of leaves after expansion" );
 void RefinementTreeTest::LeavesTest::init()
 {
     D( std::cout << "leaves test init" << std::endl; );
-    mpBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
 
     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-    // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
-    Ariadne::EffectiveConstraintSet cs = { c1 };
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-    mpRtree.reset( new ExactRefinementTree( *mpBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
     mExpansionCounter = 0;
     iterate();
 }
@@ -131,19 +126,16 @@ RefinementTreeTest::TEST_CTOR( IntersectionTest, "completeness of intersection w
 
 void RefinementTreeTest::IntersectionTest::init()
 {
-    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
 
     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-    // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
-    Ariadne::EffectiveConstraintSet cs = { c1 };
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-    mpRtree.reset( new ExactRefinementTree( *mpRootBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
     iterate();
 }
 
@@ -155,8 +147,9 @@ void RefinementTreeTest::IntersectionTest::iterate()
 bool RefinementTreeTest::IntersectionTest::check() const
 {
     // dimensions of root box
-    Ariadne::Bounds< Ariadne::FloatDP > wid = (*mpRootBox)[ 0 ].upper() - (*mpRootBox)[ 0 ].lower()
-	, hig = (*mpRootBox)[ 1 ].upper() - (*mpRootBox)[ 1 ].lower();
+    Ariadne::ExactBoxType initAbs = mpRtree->initialEnclosure();
+    Ariadne::Bounds< Ariadne::FloatDP > wid = initAbs[ 0 ].upper() - initAbs[ 0 ].lower()
+	, hig = initAbs[ 1 ].upper() - initAbs[ 1 ].lower();
     // generate new random box
     std::uniform_real_distribution<> wdist( 0.0, wid.lower().get_d() ), hdist( 0.0, hig.lower().get_d() );
     double smallerWid = wdist( mRandom ), smallerHig = hdist( mRandom );
@@ -193,19 +186,17 @@ RefinementTreeTest::TEST_CTOR( CSetIntersectionTest, "completeness of intersecti
 
 void RefinementTreeTest::CSetIntersectionTest::init()
 {
-    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,10} } ) );
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
 
     Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-    // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
-    Ariadne::EffectiveConstraintSet cs = { c1 };
+
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-    mpRtree.reset( new ExactRefinementTree( *mpRootBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
     iterate();
 }
 
@@ -216,11 +207,10 @@ void RefinementTreeTest::CSetIntersectionTest::iterate()
 
 bool RefinementTreeTest::CSetIntersectionTest::check() const
 {
+    Ariadne::ExactBoxType initAbs = mpRtree->initialEnclosure();
     // dimensions of root box
-    Ariadne::Bounds< Ariadne::FloatDP > wid = (*mpRootBox)[ 0 ].upper() - (*mpRootBox)[ 0 ].lower()
-	, hig = (*mpRootBox)[ 1 ].upper() - (*mpRootBox)[ 1 ].lower();
- 
-
+    Ariadne::Bounds< Ariadne::FloatDP > wid = initAbs[ 0 ].upper() - initAbs[ 0 ].lower()
+	, hig = initAbs[ 1 ].upper() - initAbs[ 1 ].lower();
 
    // generate new random box
     std::uniform_real_distribution<> rdist( 0.0, std::min( wid.lower().get_d(), hig.lower().get_d() ) );
@@ -236,8 +226,8 @@ bool RefinementTreeTest::CSetIntersectionTest::check() const
 
     // std::cout << "constraints " << constraints << std::endl;
     
-    std::function< Ariadne::ValidatedLowerKleenean( const typename ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > intersect =
-	[this] (auto& enc, auto& cs) { return cs.overlaps( enc ).check( mpRtree->effort() ); };
+    std::function< Ariadne::ValidatedUpperKleenean( const typename ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > intersect =
+	[this] (auto& enc, auto& cs) { return !cs.separated( enc ).check( mpRtree->effort() ); };
 	
     // for each leaf, check: either does not intersect smaller box or is contained in image
     std::vector< typename ExactRefinementTree::NodeT > constraintIntersection = mpRtree->intersection( constraints, intersect );
@@ -285,8 +275,8 @@ RefinementTreeTest::TEST_CTOR( NonLeafRemovalTest, "removes nodes from graph tha
 void RefinementTreeTest::NonLeafRemovalTest::init()
 {
     D( std::cout << "non leaf removal test init" << std::endl; );
-    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,10}, {0,9} } ) );
-    mpRtree.reset( new ExactRefinementTree( getDefaultTree( *mpRootBox, 10 ) ) );
+    Ariadne::ExactBoxType safeBox( { {0,10}, {0,9} } );
+    mpRtree.reset( new ExactRefinementTree( getDefaultTree( safeBox, 10 ) ) );
     iterate();
 }
 
@@ -332,18 +322,13 @@ RefinementTreeTest::TEST_CTOR( PreimageTest, "preimage is complete and only comp
 void RefinementTreeTest::PreimageTest::init()
 {
     D( std::cout << "preimage test init" << std::endl; );
-    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,1}, {0,2} } ) );
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,1}, {0,2} } ) );
     // need refinement tree with non-static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > fspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( fspace, {x * x, y * y} );
 
-    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::EffectiveConstraint c1 = ( (a + b) <= 5 );
-    Ariadne::EffectiveConstraintSet cs = {c1};
-
-    mpRtree.reset( new ExactRefinementTree( *mpRootBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
 }
 
 // expand
@@ -396,18 +381,13 @@ RefinementTreeTest::TEST_CTOR( PostimageTest, "postimage is complete and only co
 void RefinementTreeTest::PostimageTest::init()
 {
     D( std::cout << "preimage test init" << std::endl; );
-    mpRootBox.reset( new Ariadne::ExactBoxType( { {0,1}, {0,2} } ) );
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,1}, {0,2} } ) );
     // need refinement tree with non-static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > fspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( fspace, {x * x, y * y} );
 
-    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::EffectiveConstraint c1 = ( (a + b) <= 5 );
-    Ariadne::EffectiveConstraintSet cs = {c1};
-
-    mpRtree.reset( new ExactRefinementTree( *mpRootBox, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
 }
 
 // expand
@@ -462,18 +442,12 @@ void RefinementTreeTest::AlwaysUnsafeTest::init()
 {
     D( std::cout << "always unsafe test init" << std::endl; );
 
-    typename ExactRefinementTree::EnclosureT rtAbs = Ariadne::ExactBoxType( { {0,10}, {0,10} } );
-    Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-    // only upper bound on + values
-    Ariadne::EffectiveConstraint c1 = (constraintExpression <= 10 );
-    Ariadne::EffectiveConstraintSet cs = { c1 };
+    Ariadne::BoundedConstraintSet safeSet( Ariadne::RealBox( { {0,10}, {0,10} } ) );
     // static dynamics
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::Space< Ariadne::Real > vspace = {x, y};
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x + 1, y + 1} );
-    mpRtree.reset( new ExactRefinementTree( rtAbs, cs, f, Ariadne::Effort( 5 ) ) );
+    mpRtree.reset( new ExactRefinementTree( safeSet, f, Ariadne::Effort( 5 ) ) );
 }
 
 void RefinementTreeTest::AlwaysUnsafeTest::iterate()

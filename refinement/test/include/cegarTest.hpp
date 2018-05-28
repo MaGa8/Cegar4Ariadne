@@ -18,7 +18,7 @@ struct CegarTest : public ITestGroup
 
     static std::default_random_engine mRandom;
 
-    static std::function< Ariadne::ValidatedLowerKleenean( const typename ExactRefinementTree::EnclosureT&
+    static std::function< Ariadne::ValidatedUpperKleenean( const typename ExactRefinementTree::EnclosureT&
 							   , const Ariadne::ConstraintSet& ) > mIntersectConstraints;
 
     template< typename E, typename R >
@@ -57,7 +57,7 @@ struct CegarTest : public ITestGroup
     
     static BoundsCounterexampleT findUnsafeTrajectoryFrom( const Ariadne::ExactPoint& initial
 							   , const Ariadne::EffectiveVectorFunction& dynamics
-							   , const Ariadne::ConstraintSet& safeSet
+							   , const Ariadne::BoundedConstraintSet& safeSet
 							   , const uint& noMappings )
     {
 	BoundsCounterexampleT path;
@@ -79,7 +79,7 @@ struct CegarTest : public ITestGroup
     static BoundsCounterexampleT findUnsafeTrajectory ( std::uniform_real_distribution<>& widthDist
 							, std::uniform_real_distribution<>& heightDist
 							, const Ariadne::EffectiveVectorFunction& dynamics
-							, const Ariadne::ConstraintSet& safeSet
+							, const Ariadne::BoundedConstraintSet& safeSet
 							, const uint& noSamples
 							, const uint& noMappings )
     {
@@ -103,23 +103,19 @@ struct CegarTest : public ITestGroup
 
     //! \return refinement tree for henon map with strictly positive initial and safe sets (i.e. left hand bottom corner is origin
     template< typename BoxType >
-    static RefinementTree< BoxType >* henonMap( double initialWidth, double initialHeight
-						, double safeWidth, double safeHeight
+    static RefinementTree< BoxType >* henonMap( double safeWidth, double safeHeight
 						, double a, double b, const Ariadne::Effort& e )
     {
-	Ariadne::RealConstant ws( "ws", Ariadne::Real( safeWidth ) )
-	    , hs( "hs", Ariadne::Real( safeHeight ) );
 	Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-	Ariadne::ConstraintSet safeSet( {0 <= cx <= ws, 0 <= cy <= hs} );
 
-	BoxType initialAbstraction = { {0, initialWidth}, {0, initialHeight} };
+	Ariadne::BoundedConstraintSet safeSet( { {0, safeWidth}, {0, safeHeight} } );
 
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
 	Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - fa*x*x + y, fb*x} );
 
-	return new RefinementTree< BoxType >( initialAbstraction, safeSet, henon, e );
+	return new RefinementTree< BoxType >( safeSet, henon, e );
     }
 
     // find a counterexample in an obviously unsafe system
@@ -195,6 +191,21 @@ struct CegarTest : public ITestGroup
 	Ariadne::ConstraintSet mInitialSet;
 	Ariadne::Effort mEffort;
 	std::unique_ptr< typename Rtree::EnclosureT > mpIssue;
+    };
+
+    template< typename Rtree >
+    struct KeepInitialSet : public CegarObserver
+    {
+	template< typename IterT >
+	void searchCounterexample( const Rtree& rtree, IterT iBegin, const IterT& iEnd )
+	{
+	    mNodes.clear();
+	    mNodes.reserve( std::distance( iBegin, iEnd ) );
+	    for( ; iBegin != iEnd; ++iBegin )
+		mNodes.push_back( *iBegin );
+	}
+
+	std::vector< typename Rtree::NodeT > mNodes;
     };
     
     // test that initial abstractions are updated correctly

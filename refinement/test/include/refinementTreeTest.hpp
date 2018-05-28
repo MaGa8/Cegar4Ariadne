@@ -77,14 +77,12 @@ struct RefinementTreeTest : public ITestGroup
 	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
 	Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
-	// only upper bound on + values
-	Ariadne::EffectiveConstraint c1 = (constraintExpression <= cap );
-	Ariadne::EffectiveConstraintSet cs = { c1 };
 	// static dynamics
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::Space< Ariadne::Real > vspace = {x, y};
 	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-	return RefinementTree< Ariadne::Box< IntervalT > >( rootBox, cs, f, Ariadne::Effort( 5 ) );
+	return RefinementTree< Ariadne::Box< IntervalT > >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( rootBox ) )
+							    , f, Ariadne::Effort( 5 ) );
     }
 
     template< typename RefTree >
@@ -102,7 +100,6 @@ struct RefinementTreeTest : public ITestGroup
     class ExpansionTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpBox;
 	LargestSideRefiner mRefiner;
 	const uint EXPANSION_SIZE;
 	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
@@ -113,7 +110,6 @@ struct RefinementTreeTest : public ITestGroup
     class LeavesTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpBox;
 	const uint EXPANSION_SIZE = 2;
 	uint mExpansionCounter;
 	STATEFUL_TEST( LeavesTest );
@@ -123,7 +119,6 @@ struct RefinementTreeTest : public ITestGroup
     class IntersectionTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( IntersectionTest );
     };
@@ -132,7 +127,6 @@ struct RefinementTreeTest : public ITestGroup
     class CSetIntersectionTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( CSetIntersectionTest );
     };
@@ -141,7 +135,6 @@ struct RefinementTreeTest : public ITestGroup
     class NonLeafRemovalTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( NonLeafRemovalTest );
 	
@@ -151,7 +144,6 @@ struct RefinementTreeTest : public ITestGroup
     class PreimageTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
 	typename ExactRefinementTree::NodeT mRefined;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( PreimageTest );
@@ -161,7 +153,6 @@ struct RefinementTreeTest : public ITestGroup
     class PostimageTest : public ITest
     {
     	std::unique_ptr< ExactRefinementTree > mpRtree;
-    	std::unique_ptr< Ariadne::ExactBoxType > mpRootBox;
     	typename ExactRefinementTree::NodeT mRefined;
     	LargestSideRefiner mRefiner;
     	STATEFUL_TEST( PostimageTest );

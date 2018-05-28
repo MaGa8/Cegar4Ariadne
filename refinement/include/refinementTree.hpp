@@ -35,30 +35,42 @@ class RefinementTree
     typedef graph::AdjacencyDiGraph< std::shared_ptr< IGraphValue >, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
 
+    template< typename SpaceT >
+    static std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) > mDummyInsidePredicate = [] (auto& enc, auto& s) {
+	throw std::logic_error( "this predicate should have never been called" ); };
+
+    template< typename SpaceT >
+    static std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const SpaceT& ) > mDummyOutsidePredicate = [] (auto& enc, auto& s) {
+	throw std::logic_error( "this predicate should have never been called" ); };
+
+    static Ariadne::ExactBoxType upper2ExactBox( const Ariadne::UpperBoxType& ub )
+    {
+	Ariadne::Array< Ariadne::ExactIntervalType > ints( ub.dimension() );
+	for( uint i = 0; i < ub.dimension(); ++i )
+	    ints[ i ] = Ariadne::ExactIntervalType( cast_exact( ub[ i ].lower() ), cast_exact( ub[ i ].upper() ) );
+	return Ariadne::ExactBoxType( ints );
+    }
+    
     /*!
       \param initial abstraction using a single box
       \param constraints safety constraints to be satisfied
       \param dynamics function describing evolution of points
     */
-    RefinementTree( const EnclosureT& initial
-		    , const Ariadne::ConstraintSet& constraints
+    RefinementTree( const Ariadne::BoundedConstraintSet& safeSet
 		    , const Ariadne::EffectiveVectorFunction dynamics
 		    , const Ariadne::Effort effort
 		    )
-	: mConstraints( constraints )
+	: mSafeSet( safeSet )
 	, mDynamics( dynamics )
 	, mEffort( effort )
 	, mNodeIdCounter( 0 )
-	, mRefinements( typename RefinementT::ValueT( makeLeaf( initial )
-						      //				   , universeBox( initial.dimension() )
-						      //, constraints.covers( universeBox( initial.dimension() ) ).check( effort )
-						      ) )
+	, mRefinements( typename RefinementT::ValueT( makeLeaf( upper2ExactBox( safeSet.bounding_box() ) ) ) )
     {
-	// add always unsafe node
-	auto iAddedUnsafe = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
-	if( iAddedUnsafe == graph::vertices( mMappings ).second )
+	// add outside node
+	auto iAddedOutside = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
+	if( iAddedOutside == graph::vertices( mMappings ).second )
 	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
-	mOutsideNode = *iAddedUnsafe;
+	mOutsideNode = *iAddedOutside;
 	
 	// set up root
 	typename RefinementT::NodeT rt = root( mRefinements );
@@ -73,9 +85,9 @@ class RefinementTree
     }
 
     //! \return constraints determining the safe set
-    const Ariadne::ConstraintSet& constraints() const
+    const Ariadne::BoundedConstraintSet& constraints() const
     {
-	return mConstraints;
+	return mSafeSet;
     }
 
     const Ariadne::EffectiveVectorFunction& dynamics() const
@@ -139,29 +151,34 @@ class RefinementTree
     template< typename EnclosureT2 >
     std::vector< NodeT > intersection( const EnclosureT2& with, const typename RefinementT::NodeT& subtreeRoot ) const
     {
-	std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const EnclosureT2& ) > inter = [this] (const EnclosureT& n, const EnclosureT2& with ) {
-	    return !Ariadne::intersection( n, with ).is_empty(); };
+	std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const EnclosureT2& ) > inter =
+	    [this] (const EnclosureT& n, const EnclosureT2& with ) {
+	    Ariadne::ValidatedLowerKleenean emptyIntersection = Ariadne::intersection( n, with ).is_empty();
+	    return !emptyIntersection; };
+	
 	std::vector< NodeT > abs = intersectionRecursive( subtreeRoot, with, inter );
 	// image recursive does not add outside
-	if( definitely( !(Ariadne::intersection( with, tree::value( tree(), tree::root( tree() ) )->getEnclosure() ) == with ) ) )
+	if( possibly( overlaps( with, outside() ) ) )
 	    abs.push_back( outside() );
 	return abs;
     }
 
     //! \brief generalization of other intersection overloads
-    template< typename SpaceT >
-    std::vector< NodeT > intersection( const typename RefinementT::NodeT& subRoot, const SpaceT& s
-				       , const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& pred )
+    //! \param pred function overapproximating whether enclosure and space intersect
+    template< typename ConstraintSetT >
+    std::vector< NodeT > intersection( const typename RefinementT::NodeT& subRoot, const ConstraintSetT& s
+				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred )
     {
 	std::vector< NodeT > abs = intersectionRecursive( subRoot, s, pred );
-	if( possibly( relates( outside(), s, pred ) ) )
+	// relates is applied to outside node, so dummy is never called
+	if( possibly( overlapsConstraints( s, outside() ) ) )
 	    abs.push_back( outside() );
 	return abs;
     }
 
-    template< typename SpaceT >
-    std::vector< NodeT > intersection( const SpaceT& s
-				       , const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& pred )
+    template< typename ConstraintSetT >
+    std::vector< NodeT > intersection( const ConstraintSetT& s
+				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred )
     {
 	return intersection( tree::root( tree() ), s, pred );
     }
@@ -269,28 +286,125 @@ class RefinementTree
 	}
     }
 
-    //! \return True if enclosure represented by n relates to space s, false if it does not and indeterminate otherwise. If n in a node inside the initial abstraction, the relation cannot be falisified. If n is an outside node then the relation cannot be affirmed
-    template< typename SpaceT >
-    Ariadne::ValidatedKleenean relates( const NodeT& n, const SpaceT& s
-					, const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& p ) const
+    //! \return true if n1 overlaps with n2
+    Ariadne::ValidatedUpperKleenean overlaps( const NodeT& n1, const NodeT& n2 ) const
     {
-	auto val = nodeValue( n );
-	if( val )
-	{
-	    if( definitely( p( val.value().get().getEnclosure(), s ) ) )
-		return true;
-	    else
-		return Ariadne::indeterminate;
-	}
-	else
-	{
-	    if( possibly( !p( initialEnclosure(), s ) ) )
-		return Ariadne::indeterminate;
-	    else
-		return false;
-	}
+    	auto v1 = nodeValue( n1 ), v2 = nodeValue( n2 );
+    	if( v1 && v2 )
+    	    return !Ariadne::intersection( v1.value().get().getEnclosure(), v2.value().get().getEnclosure() ).is_empty();
+	else if( !v1 && !v2 )
+	    return Ariadne::ValidatedUpperKleenean( true );          // outside always overlaps with itself
+	else if( !v1 )
+    	    return !(Ariadne::intersection( initialEnclosure(), v2.value().get().getEnclosure() ) == v2.value().get().getEnclosure() );
+    	else
+    	    return overlaps( n2, n1 );
     }
 
+    template< typename E2 >
+    Ariadne::ValidatedUpperKleenean overlaps( const E2& otherEnclosure, const NodeT& n ) const
+    {
+	auto nval = nodeValue( n );
+    	if( nval )
+    	    return !(Ariadne::intersection( otherEnclosure, nval.value().get().getEnclosure() ).is_empty() );
+    	else
+	    return !(Ariadne::intersection( initialEnclosure(), otherEnclosure ) == otherEnclosure );
+    }
+
+    //! \return true if n overlaps with constraint
+    template< typename ConstraintSetT >
+    Ariadne::ValidatedUpperKleenean overlapsConstraints( const ConstraintSetT& constraintSet, const NodeT& n ) const
+    {
+    	auto nval = nodeValue( n );
+    	if( nval )
+    	    return !(constraintSet.separated( nval.value().get().getEnclosure() ).check( mEffort ) );
+    	else
+    	{
+    	    const EnclosureT initialAbs = initialEnclosure();
+    	    if( std::all_of( constraintSet.constraints().begin(), constraintSet.constraints().end()                    
+    	    		     , [&initialAbs] (auto& c) {
+				 Ariadne::List< Ariadne::EffectiveConstraint > single = {c};
+				 return definitely( Ariadne::ConstraintSet( single ).covers( initialAbs ) ); } ) )
+    	    	return Ariadne::ValidatedUpperKleenean( false );
+    	    return Ariadne::ValidatedUpperKleenean( true );
+    	}
+    }
+
+    // //! \return true if n1 covers n2
+    // Ariadne::ValidatedKleenean covers( const NodeT& n1, const NodeT& n2 )
+    // {
+    // 	auto v1 = nodeValue( n1 ), v2 = nodeValue( n2 );
+    // 	if( v1 && v2 )
+    // 	    return toKleenean( Ariadne::intersection( v1.value().get().getEnclosure(), v2.value().get().getEnclosure() ) ==
+    // 			       v2.value().get().getEnclosure() );
+    // 	else if( !v1 && !v2 )
+    // 	    return Ariadne::ValidatedKleenean( true );
+    // 	else if( !v1 )
+    // 	    return toKleenean( !Ariadne::intersection( initialEnclosure(), v2.value().get().getEnclosure() ).is_empty() );
+    // 	else
+    // 	    return Ariadne::ValidatedKleenean( false );
+    // }p
+
+    // //! \return true if constraint covers n
+    // template< typename ConstraintT >
+    // Ariadne::ValidatedKleenean covers( const ConstraintT& constraint, const NodeT& n )
+    // {
+    // 	auto nval = nodeValue( n );
+    // 	if( nval )
+    // 	    return toKleenean( constraint.covers( nval.value().get().getEnclosure() ) );
+    // 	Ariadne::ValidatedKleenean( false ); // good enough: cannot cover the outside fully
+    // }
+
+    // //! \return true if n1 is separated from n2
+    // Ariadne::ValidatedKleenean separated( const NodeT& n1, const NodeT& n2 )
+    // {
+    // 	auto v1 = nodeValue( n1 ), v2 = nodeValue( n2 );
+    // 	if( v1 && v2 )
+    // 	    return !overlaps( n1, n2 );
+    // 	else if( !v1 && !v2 )
+    // 	    return false;  // outside cannot be separated
+    // 	else if( !v1 )
+    // 	    return toKleenean( !(Ariadne::intersection( initialEnclosure(), v2.value().get().getEnclosure() )
+    // 				 == v2.value().get().getEnclosure() ) );
+    // 	else
+    // 	    return separated( n2, n1 ); // is associative
+    // }
+
+    // //! \return true if n is separated from constraint
+    // template< typename ConstraintSetT >
+    // Ariadne::ValidatedKleenean separated( const ConstraintSetT& cset, const NodeT& n )
+    // {
+    // 	auto nval = nodeValue( n );
+    // 	if( nval )
+    // 	    return toKleenean( cset.separated( nval.value().get().getEnclosure() ) );
+    // }
+    
+    // /*!
+    //   \param predIn predicate to verify when applied to n and s if n is an inside node
+    //   \param predOut predicate to falisify when applied to the initial abstraction and s if n is an outside node
+    //   \return true if either n is an inside node and predIn( n, s ) is definitely satisfied or if n is an outside node and predOut( initialAbstraction, s ) is definitely not satisfied; indeterminate otherwise
+    // */
+    // template< typename SpaceT >
+    // Ariadne::ValidatedKleenean relates( const NodeT& n, const SpaceT& s
+    // 					, const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) >& predIn
+    // 					, const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const SpaceT& ) >& predOut) const
+    // {
+    // 	auto val = nodeValue( n );
+    // 	if( val )
+    // 	{
+    // 	    if( definitely( predIn( val.value().get().getEnclosure(), s ) ) )
+    // 		return true;
+    // 	    else
+    // 		return Ariadne::indeterminate;
+    // 	}
+    // 	else
+    // 	{
+    // 	    if( definitely( !predOut( initialEnclosure(), s ) ) )
+    // 		return true;
+    // 	    else
+    // 		return Ariadne::indeterminate;
+    // 	}
+    // }
+    
     //! \return true if nodes are equal based on their identifiers, false otherwise
     bool equal( const NodeT& n1, const NodeT& n2 )
     {
@@ -344,8 +458,6 @@ class RefinementTree
 
   private:
 
-    // helper function for recursive calls of image
-    // abstract same code as leaves in DFS controller
     /*!
       \param from enclosure whose image to find
       \param to image boxes located in subtree rooted at to
@@ -353,13 +465,15 @@ class RefinementTree
     */
     template< typename E2 >
     std::vector< NodeT > intersectionRecursive( const typename RefinementT::NodeT& subRoot, const E2& with
-						, const std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const E2& ) >& pred ) const
+						, const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const E2& ) >& pred ) const
     {
     	// vector because there can't be duplicates
     	std::vector< NodeT > parts;
 	const InteriorTreeValue< EnclosureT >& subRootVal = *tree::value( mRefinements, subRoot );
     	const EnclosureT& subRootBox = subRootVal.getEnclosure();
 
+	// will always be false: pred yields validated lower kleenean
+	// so negation is validated upper kleenean which cannot be affirmed
 	if( definitely( !pred( subRootBox, with ) ) )
     	    return parts;
     	else if( tree::isLeaf( mRefinements, subRoot ) )
@@ -375,7 +489,7 @@ class RefinementTree
     	}
     	return parts;
     }
-
+			
     //! \return pointer to newly allocated leaf value ensuring that the safety flag is correctly initialized
     LeafTreeValue< EnclosureT, typename MappingT::VertexT >* makeLeaf( const EnclosureT& enc )
     {
@@ -450,7 +564,7 @@ class RefinementTree
 	graph::removeVertex( mMappings, n );
     }
     
-    Ariadne::ConstraintSet mConstraints;
+    Ariadne::BoundedConstraintSet mSafeSet;
     Ariadne::EffectiveVectorFunction mDynamics;
     Ariadne::Effort mEffort;
     unsigned long mNodeIdCounter;

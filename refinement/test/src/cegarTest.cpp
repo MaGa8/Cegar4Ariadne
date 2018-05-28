@@ -9,8 +9,8 @@
 
 std::default_random_engine CegarTest::mRandom = std::default_random_engine( std::random_device()() );
 
-std::function< Ariadne::ValidatedLowerKleenean( const typename CegarTest::ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > CegarTest::mIntersectConstraints =
-    [] (auto& enc, auto& cset ) {return cset.overlaps( enc ).check( Ariadne::Effort( 10 ) ); };
+std::function< Ariadne::ValidatedUpperKleenean( const typename CegarTest::ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > CegarTest::mIntersectConstraints =
+    [] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( Ariadne::Effort( 10 ) ) ); };
 
 CegarTest::TEST_CTOR( FindCounterexampleTest, "finds counterexample" )
 
@@ -23,14 +23,13 @@ void CegarTest::FindCounterexampleTest::init()
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
-    
     mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
 
-    Ariadne::ExactBoxType initialAbs = { {-boundary - delta, boundary + delta}               // initial box wide enough so counterexamples inside exist
+    
+    Ariadne::RealBox initialAbs = { {-boundary - delta, boundary + delta}               // initial box wide enough so counterexamples inside exist
 					 , {-boundary - delta, boundary + delta} };          // cs.constraint_bounds();
 
-    mpRtree.reset( new ExactRefinementTree( initialAbs, cs, f, Ariadne::Effort( 10 ) ) );
+    mpRtree.reset( new ExactRefinementTree( Ariadne::BoundedConstraintSet( initialAbs ), f, Ariadne::Effort( 10 ) ) );
 }
 
 void CegarTest::FindCounterexampleTest::iterate()
@@ -49,7 +48,7 @@ bool CegarTest::FindCounterexampleTest::check() const
 	return false;
 
     auto counterex = guide.obtain();
-    if( definitely( !mpRtree->relates( counterex.front(), *mpInitial, mIntersectConstraints ) ) )
+    if( definitely( !mpRtree->overlapsConstraints( *mpInitial, counterex.front() ) ) )
     {
 	D( std::cout << "counterexample does not begin in initial set" << std::endl; );
 	return false;
@@ -70,14 +69,12 @@ void CegarTest::FindNoCounterexampleTest::init()
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
+    mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
 
-mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
-
-    Ariadne::ExactBoxType initialAbs = { {0, 1}               // initial box wide enough so counterexamples inside exist
+    Ariadne::RealBox initialAbs = { {0, 1}               // initial box wide enough so counterexamples inside exist
 					 , {0, 1} };          // cs.constraint_bounds();
 
-    mpRtree.reset( new ExactRefinementTree( initialAbs, cs, f, Ariadne::Effort( 10 ) ) );
+    mpRtree.reset( new ExactRefinementTree( Ariadne::BoundedConstraintSet( initialAbs ), f, Ariadne::Effort( 10 ) ) );
 }
 
 void CegarTest::FindNoCounterexampleTest::iterate()
@@ -115,7 +112,6 @@ void CegarTest::InitialAbstraction::iterate()
 	, delta = mDeltaDist( mRandom );
 
     mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid + delta, hig + delta
-									 , safeSetWidth, safeSetWidth
 									 , 1.4, 0.3, Ariadne::Effort( 10 ) ) );
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
@@ -124,9 +120,6 @@ void CegarTest::InitialAbstraction::iterate()
 	, h = constant( "h", hig )
 	, zero = constant( "zero", 0.0 );
     
-    // problem: this test is safe by construction, because the initial set is equal to the initial abstraction
-    // so any refinement thereof is in the initial set and hence no incorrect value ever occurs
-
     mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid}, {0, hig} },
 							   { zero <= cx <= w, zero <= cy <= h } ) );
 }
@@ -135,15 +128,36 @@ bool CegarTest::InitialAbstraction::check() const
 {
     Ariadne::Effort effort( 10 );
     CheckInitialSet checkObs( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort );
+    KeepInitialSet< ExactRefinementTree > keeper;
     PrintInitialSet iniPrint;
 
     std::cout << "initial set " << *mpInitialSet << std::endl;
-    cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, iniPrint );
+    cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, keeper, iniPrint );
     if( checkObs.mpIssue )
     {
 	std::cout << "found " << *checkObs.mpIssue << " in initial set, even though it is not in " << *mpInitialSet << std::endl;
 	return false;
     }
+    
+    // verify that all final leaf nodes inside the initial set are contained
+    NodeComparator< typename ExactRefinementTree::EnclosureT > ncomp( *mpRtree );
+    for( auto leafRange = mpRtree->leafMapping().vertices(); leafRange.first != leafRange.second; ++leafRange.first )
+    {
+	if( definitely( mpRtree->overlapsConstraints( *mpInitialSet, *leafRange.first ) ) )
+	{
+	    auto ifound = std::find_if( keeper.mNodes.begin(), keeper.mNodes.end()
+					, std::bind( &NodeComparator< typename ExactRefinementTree::EnclosureT >::operator()
+						     , &ncomp, *leafRange.first, std::placeholders::_1 ) );
+	    if( ifound == keeper.mNodes.end() )
+	    {
+		std::cout << "node in initial set ";
+		printNode( *mpRtree, *leafRange.first );
+		std::cout << " is not contained in the initial set of the last iteration " << std::endl;
+		return false;
+	    }
+	}
+    }
+    
     return true;
 }
 
@@ -171,9 +185,9 @@ void CegarTest::VerifySafety::iterate()
     Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
 
     // figure out how to use bounds on safe region to do this
-    Ariadne::ExactBoxType initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
+    Ariadne::RealBox initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
 
-    mpRtree.reset( new ExactRefinementTree( initialAbs, cs, insideMap, Ariadne::Effort( 10 ) ) );
+    mpRtree.reset( new ExactRefinementTree( Ariadne::BoundedConstraintSet( initialAbs ), insideMap, Ariadne::Effort( 10 ) ) );
 }
 
 bool CegarTest::VerifySafety::check() const
@@ -199,19 +213,17 @@ void CegarTest::LoopTest::iterate()
 {
     double wid = mInitialBoxLengthDist( mRandom ),
 	hig = mInitialBoxLengthDist( mRandom ),
-	delta = mDeltaDist( mRandom )
-	, boundary = std::max( wid + delta, hig + delta );
+	delta = mDeltaDist( mRandom );
 
-    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid, hig, boundary, boundary, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
-
+    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid, hig, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+    
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
     Ariadne::RealConstant w = constant( "w", wid )
 	, h = constant( "h", hig )
 	, zero = constant( "zero", 0.0 );
 
-    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid}, {0, hig} },
-							   { zero <= cx <= w, zero <= cy <= h } ) );
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid - delta}, {0, hig - delta} } ) );
 }
 
 bool CegarTest::LoopTest::check() const
