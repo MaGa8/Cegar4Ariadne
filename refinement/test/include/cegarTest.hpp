@@ -19,7 +19,7 @@ struct CegarTest : public ITestGroup
     static std::default_random_engine mRandom;
 
     static std::function< Ariadne::ValidatedUpperKleenean( const typename ExactRefinementTree::EnclosureT&
-							   , const Ariadne::ConstraintSet& ) > mIntersectConstraints;
+							   , const Ariadne::BoundedConstraintSet& ) > mIntersectConstraints;
 
     template< typename E, typename R >
     static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
@@ -122,7 +122,7 @@ struct CegarTest : public ITestGroup
     class FindCounterexampleTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
+	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitial;
 	LargestSideRefiner mRefiner;
 	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 1 );
 	STATEFUL_TEST( FindCounterexampleTest );
@@ -134,7 +134,7 @@ struct CegarTest : public ITestGroup
     class FindNoCounterexampleTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	std::unique_ptr< Ariadne::ConstraintSet > mpInitial;
+	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitial;
 	LargestSideRefiner mRefiner;
 	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > ( 1 );
 	STATEFUL_TEST( FindNoCounterexampleTest );
@@ -152,6 +152,21 @@ struct CegarTest : public ITestGroup
 	    {
 		printNode( rtree, *iBegin );
 		std::cout << std::endl;
+	    }
+	    std::cout << std::endl;
+	}
+    };
+
+    struct PrintCounterexample : public CegarObserver
+    {
+	template< typename Rtree, typename IterT >
+	void processCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+	{
+	    std::cout << "counterexample found " << std::endl;
+	    for( ; iCounterexBegin != iCounterexEnd; ++iCounterexBegin )
+	    {
+		printNode( rtree, *iCounterexBegin );
+		std::cout << " -> " << std::endl;
 	    }
 	    std::cout << std::endl;
 	}
@@ -228,9 +243,9 @@ struct CegarTest : public ITestGroup
     // verify safety of trivially safe system
     class VerifySafety : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 20;
+	static const uint MAX_NODES_FACTOR = 100;
     	std::unique_ptr< ExactRefinementTree > mpRtree;
-    	std::unique_ptr< Ariadne::ConstraintSet > mpInitialSet;
+    	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
     	LargestSideRefiner mRefinement;
     	CompleteCounterexample mLocator;
 	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
@@ -245,7 +260,7 @@ struct CegarTest : public ITestGroup
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 20; // because: 50 * 200 = b10,000
+	static const uint MAX_NODES_FACTOR = 50; // because: 50 * 200 = b10,000
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
 	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;

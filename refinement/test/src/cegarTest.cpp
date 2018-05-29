@@ -9,7 +9,7 @@
 
 std::default_random_engine CegarTest::mRandom = std::default_random_engine( std::random_device()() );
 
-std::function< Ariadne::ValidatedUpperKleenean( const typename CegarTest::ExactRefinementTree::EnclosureT&, const Ariadne::ConstraintSet& ) > CegarTest::mIntersectConstraints =
+std::function< Ariadne::ValidatedUpperKleenean( const typename CegarTest::ExactRefinementTree::EnclosureT&, const Ariadne::BoundedConstraintSet& ) > CegarTest::mIntersectConstraints =
     [] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( Ariadne::Effort( 10 ) ) ); };
 
 CegarTest::TEST_CTOR( FindCounterexampleTest, "finds counterexample" )
@@ -23,8 +23,7 @@ void CegarTest::FindCounterexampleTest::init()
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
-
+    mpInitial.reset( new Ariadne::BoundedConstraintSet( Ariadne::RealBox( { {-1, 1}, {-1, 1} } ) ) );
     
     Ariadne::RealBox initialAbs = { {-boundary - delta, boundary + delta}               // initial box wide enough so counterexamples inside exist
 					 , {-boundary - delta, boundary + delta} };          // cs.constraint_bounds();
@@ -69,7 +68,7 @@ void CegarTest::FindNoCounterexampleTest::init()
 
     Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    mpInitial.reset( new Ariadne::ConstraintSet( { -1 <= cx <= 1, -1 <= cy <= 1 } ) );
+    mpInitial.reset( new Ariadne::BoundedConstraintSet( Ariadne::RealBox( { {-1, 1}, {-1, 1 } } ) ) );
 
     Ariadne::RealBox initialAbs = { {0, 1}               // initial box wide enough so counterexamples inside exist
 					 , {0, 1} };          // cs.constraint_bounds();
@@ -131,8 +130,7 @@ bool CegarTest::InitialAbstraction::check() const
     KeepInitialSet< ExactRefinementTree > keeper;
     PrintInitialSet iniPrint;
 
-    std::cout << "initial set " << *mpInitialSet << std::endl;
-    cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, keeper, iniPrint );
+    cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, keeper );
     if( checkObs.mpIssue )
     {
 	std::cout << "found " << *checkObs.mpIssue << " in initial set, even though it is not in " << *mpInitialSet << std::endl;
@@ -171,18 +169,11 @@ void CegarTest::VerifySafety::iterate()
 	, boundary = std::max( wid + delta, hig + delta )
 	, attraction = mAttractionDist( mRandom );
 
-    Ariadne::RealConstant w( "w", Ariadne::Real( wid ) )
-	, h( "h", Ariadne::Real( hig ) );
-    Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-
-    mpInitialSet.reset( new Ariadne::ConstraintSet( { -w <= cx <= w, -h <= cy <= h } ) );
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( Ariadne::RealBox( { {-wid, wid}, {-hig, hig} } ) ) );
 
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::RealConstant a( "a", Ariadne::Real( attraction ) );
     Ariadne::EffectiveVectorFunction insideMap = Ariadne::make_function( {x, y}, {a*x, a*y} );
-
-    Ariadne::ConstraintSet cs = { cx*cx + cy*cy <= boundary };          // large value so it will take some time to diverge enough
 
     // figure out how to use bounds on safe region to do this
     Ariadne::RealBox initialAbs = { {-boundary, boundary}, {-boundary, boundary} };
@@ -193,10 +184,11 @@ void CegarTest::VerifySafety::iterate()
 bool CegarTest::VerifySafety::check() const
 {
     PrintInitialSet iniPrint;
+    PrintCounterexample cexPrint;
 
-    std::cout << "initial set " << *mpInitialSet << std::endl;
-    
-    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize, iniPrint );
+    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize
+			      // , iniPrint, cexPrint
+			      );
     if( !definitely( cegarResult.first ) )
     {
 	std::cout << "could not verify safety of system safe by construction, safety " << cegarResult.first
@@ -236,8 +228,7 @@ bool CegarTest::LoopTest::check() const
 
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
-    auto cegarCounterex = cegar( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() )
-				 , Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
 
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
@@ -274,7 +265,7 @@ void CegarTest::init()
 	, pStateless( new StatelessRunner() );
     // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    // addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
     // addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    // addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
+    addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
 }

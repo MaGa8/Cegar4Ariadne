@@ -274,15 +274,19 @@ class RefinementTree
 	std::optional< std::reference_wrapper< const InteriorTreeValue< EnclosureT > > > trgVal = nodeValue( trg );
 	if( trgVal )
 	{
-	    auto mapIntersection = Ariadne::intersection( src, trgVal.value().get().getEnclosure() );
+	    auto mapIntersection = Ariadne::intersection( ubMapped, trgVal.value().get().getEnclosure() );
 	    Ariadne::ValidatedUpperKleenean doesInter = !mapIntersection.is_empty();
 	    return doesInter;
 	}
 	else
 	{
-	    const EnclosureT& initialRefEnc = tree::value( tree(), tree::root( tree() ) )->getEnclosure();
-	    Ariadne::ValidatedLowerKleenean intersectionEqual = Ariadne::intersection( initialRefEnc, ubMapped ) == src;
-	    return !intersectionEqual;
+	    Ariadne::RealBox initialAbs( initialEnclosure() );
+	    Ariadne::BoundedConstraintSet insideInitialAbs( initialAbs );
+	    Ariadne::ExactBoxType mappedOverapprox = upper2ExactBox( ubMapped );
+	    Ariadne::ValidatedLowerKleenean imageContainedInside = insideInitialAbs.covers( mappedOverapprox, mEffort );
+	    // Ariadne::ValidatedUpperKleenean intersectionEqual = Ariadne::intersection( initialEnclosure(), ubMapped ) == ubMapped;
+	    // return intersectionEqual;
+	    return !imageContainedInside;
 	}
     }
 

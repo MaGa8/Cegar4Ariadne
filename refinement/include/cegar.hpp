@@ -6,6 +6,11 @@
 #include "locator.hpp"
 #include "cegarObserver.hpp"
 
+#include "geometry/geometry.hpp"
+#include "geometry/set.hpp"
+#include "geometry/function_set.hpp"
+#include "geometry/set_interface.hpp"
+
 #include <stack>
 #include <functional>
 
@@ -127,7 +132,7 @@ Ariadne::ExactBoxType boundsPoint2Box( const Ariadne::Point< Ariadne::Bounds< F 
 template< typename E, typename PathIterT >
 Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 					    , PathIterT beginCounter, PathIterT endCounter
-					    , const Ariadne::ConstraintSet& initialSet
+					    , const Ariadne::BoundedConstraintSet& initialSet
 					    , const Ariadne::Effort& effort )
 {
     typedef RefinementTree< E > Rtree;
@@ -137,25 +142,12 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 
     if( !oBeginCex )
     {
-	std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > covers =
-	    [&effort] (auto& nodeEnc, auto& cset ) {return !(cset.separated( nodeEnc ).check( effort ) ); };
+	// INCLUDE AGAIN ONCE ISSUE WITH INSIDE IS SETTLED
+	// Ariadne::ValidatedKleenean initialInsideSafe = inside( initialSet, rtree.constraints(), 0.00001 );
+	// if( definitely( !initialInsideSafe ) ) // replace this arbitrary number by parameter
+	//    return false;
 
-	//eventually find a place in e.g. RefinementTree for this
-	// Ariadne::List< Ariadne::EffectiveConstraint > outsideConstraints;
-	// for( auto interval : rtree.initialEnclosure().array() )
-	//     outsideConstraints.append(
-				      
-	// ConstraintSet outsideInitialAbstraction
-	// if( 
-
-	//    definitely( rtree.relates( rtree.outside(), initialSet, RefinementTree< E >::mDummyInsidePredicate, covers ) ) )
-	assert( false ); // fix code above to tell how to proceed if initial set and outside node intersect
-	return false;
-	// if( std::any_of( beginImage, endImage, [&rtree, &notCovers] (const typename Rtree::NodeT& n) {
-		    // return possibly( rtree.relates( n, rtree.initialEnclosure(), notCovers ) ); } ) ) 
-	    // return false;
-	// else
-	    return true;
+	return true;
     }
 
     // find correct typedef to work with
@@ -208,7 +200,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 */
 template< typename E, typename RefinementT, typename LocatorT, template< typename EE > typename GuideT, typename ... ObserversT >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
-								     , const Ariadne::ConstraintSet& initialSet
+								     , const Ariadne::BoundedConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
 								     , const RefinementT& refinement
 								     , LocatorT locator
@@ -218,7 +210,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 {
     typedef RefinementTree< E > Rtree;
 
-    std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::ConstraintSet& ) > interPred =
+    std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::BoundedConstraintSet& ) > interPred =
 	[effort] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( effort ) ); };
     
     NodeSet< E > initialImage = NodeSet< E >( NodeComparator( rtree ) );

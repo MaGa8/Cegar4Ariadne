@@ -1,6 +1,5 @@
 ROOTDIR = ../..
 MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR)
-# TARGET = runRefinementTreeTest
 
 -include $(ROOTDIR)/common.mk
 
