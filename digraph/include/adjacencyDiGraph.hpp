@@ -340,7 +340,6 @@ namespace graph
 		n.second.mPtr->mOuts.clear();
 	    	n.second.mPtr.reset();
 	    }
-	    
 	}
 	
       private:
