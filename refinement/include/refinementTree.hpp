@@ -129,7 +129,7 @@ class RefinementTree
 	if( on )
 	    return on.value().get().isSafe();
 	else
-	    return false;
+	    return Ariadne::ValidatedKleenean( false );
     }
 
     //! \return the always unsafe node used

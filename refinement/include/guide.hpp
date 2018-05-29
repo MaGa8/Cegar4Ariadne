@@ -19,6 +19,28 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
    bool hasCounterexample()
    CounterexampleT< E > obtain()
 */
+template< typename E >
+struct Guide
+{
+    //! \brief called before the search is started
+    void startSearch() {}
+
+    //! \brief called whenever a counterexample is found
+    template< typename IterT >
+    void found( IterT beginCounterex, const IterT& encCounterex ) {}
+
+    //! \return true if the search should be terminated
+    bool terminateSearch() {}
+
+    //! \brief called if all states have been visited
+    void outOfCounterexamples() {}
+
+    //! \return true if guide has at least one counterexample
+    bool hasCounterexample() {}
+
+    //! \return some counterexample
+    CounterexampleT< E > obtain() {}
+};
 
 /*!
   \class for each counterexample found: randomly decide whether or not to replace the one previously stored
@@ -27,7 +49,7 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
   to balance: stop search with probability p at each step
  */
 template< typename E >
-class KeepRandomCounterexamples
+class KeepRandomCounterexamples : public Guide< E >
 {
   public:
     KeepRandomCounterexamples( double p )
@@ -40,6 +62,7 @@ class KeepRandomCounterexamples
     void startSearch()
     {
 	mTerminate = false;
+	mCounterexample.clear();
     }
     
     template< typename IterT >
@@ -51,11 +74,6 @@ class KeepRandomCounterexamples
 
 	if( mDist( mRandom ) < mP )
 	    mTerminate = true;
-    }
-
-    void outOfCounterexamples()
-    {
-	mSearchStopped = true;
     }
 
     bool terminateSearch() { return mTerminate; }
@@ -74,7 +92,7 @@ class KeepRandomCounterexamples
     CounterexampleT< E > mCounterexample;
     std::uniform_real_distribution<> mDist;
     std::default_random_engine mRandom;
-    bool mTerminate, mSearchStopped;
+    bool mTerminate;
 };
 
 

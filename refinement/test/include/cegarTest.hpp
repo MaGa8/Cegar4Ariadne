@@ -266,14 +266,65 @@ struct CegarTest : public ITestGroup
 	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::uniform_real_distribution<> mAttractionDist = std::uniform_real_distribution( 0.1, 0.9 );
 	
-
     	STATELESS_TEST( VerifySafety );
+    };
+
+    struct CounterexampleVerifier : public CegarObserver
+    {
+	template< typename IterT >
+	void processCounterexample( const ExactRefinementTree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+	{
+	    if( !mBadCounterexample.empty() )
+		return;
+
+	    auto icex = iCounterexBegin;
+	    auto currentVal = rtree.nodeValue( *iCounterexBegin ), lastVal = currentVal;
+
+	    while( currentVal && mBadCounterexample.empty() && icex != iCounterexEnd )
+	    {
+		++icex;
+		lastVal = currentVal;
+
+		if( icex != iCounterexEnd )
+		{
+		    currentVal = rtree.nodeValue( *icex );
+		    if( currentVal )
+		    {
+			Ariadne::UpperBoxType mapped = Ariadne::image( lastVal.value().get().getEnclosure(), rtree.dynamics() );
+			if( definitely( Ariadne::intersection( mapped, currentVal.value().get().getEnclosure() ).is_empty() ) )
+			{
+			    mBadCounterexample = std::vector< typename ExactRefinementTree::NodeT >( iCounterexBegin, iCounterexEnd );
+			    mBadLink = mBadCounterexample.begin();
+			    std::advance( mBadLink, std::distance( iCounterexBegin, icex ) );
+			}
+		    }
+		}
+	    }
+	}
+
+	std::vector< typename ExactRefinementTree::NodeT > mBadCounterexample;
+	std::vector< typename ExactRefinementTree::NodeT >::const_iterator mBadLink;
+    };
+    
+    //! \class tests that successive states in counterexamples are reachable
+    class VerifyCounterexamples : public ITest
+    {
+	static const uint MAX_NODES_FACTOR = 25;
+	std::unique_ptr< ExactRefinementTree > mpRtree;
+	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
+	LargestSideRefiner mRefinement;
+	CompleteCounterexample mLocator;
+	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 25 )    
+	    , mSafeBoxLengthDist = std::exponential_distribution<>( 0.01 );                              // narrow initial set, wide safe set => many counterexamples
+
+	STATELESS_TEST( VerifyCounterexamples );
     };
 
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 50; // because: 50 * 200 = b10,000
+	static const uint MAX_NODES_FACTOR = 100; // because: 50 * 200 = b10,000
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
 	    , mSafeSetBoxLengthDist = std::exponential_distribution<>( 0.1 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;

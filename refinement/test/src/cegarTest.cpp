@@ -199,6 +199,38 @@ bool CegarTest::VerifySafety::check() const
     return true;
 }
 
+CegarTest::TEST_CTOR( VerifyCounterexamples, "verify consecutive nodes in counterexample are reachable" )
+
+void CegarTest::VerifyCounterexamples::iterate()
+{
+    double wi = mInitialBoxLengthDist( mRandom )
+	, hi = mInitialBoxLengthDist( mRandom )
+	, ws = mSafeBoxLengthDist( mRandom )
+	, hs = mSafeBoxLengthDist( mRandom );
+    
+    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( ws, hs, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wi}, {0, hi} } ) );
+}
+
+bool CegarTest::VerifyCounterexamples::check() const
+{
+    CounterexampleVerifier verifier;
+    cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize, verifier );
+
+    if( !verifier.mBadCounterexample.empty() )
+    {
+	std::cout << "found counterexample with bad link " << std::endl;
+	printCounterexample( *mpRtree, verifier.mBadCounterexample.begin(), verifier.mBadCounterexample.end() );
+	std::cout << "bad link being ";
+	printNode( *mpRtree, *(verifier.mBadLink - 1) );
+	std::cout << " -> ";
+	printNode( *mpRtree, *verifier.mBadLink );
+	std::cout << std::endl;
+	return false;
+    }
+    return true;
+}
+
 CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
 
 void CegarTest::LoopTest::iterate()
@@ -209,14 +241,6 @@ void CegarTest::LoopTest::iterate()
 	, hs = mSafeSetBoxLengthDist( mRandom );
     
     mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( ws, hs, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
-    
-    // Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-    // 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-
-    // Ariadne::RealConstant w = constant( "w", wid )
-    // 	, h = constant( "h", hig )
-    // 	, zero = constant( "zero", 0.0 );
-
     mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wi}, {0, hi} } ) );
 }
 
@@ -230,13 +254,9 @@ bool CegarTest::LoopTest::check() const
 
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
+    DebugOutput dbgout;
+
     auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
-
-    // std::cout << "initial set " << *mpInitialSet << std::endl;
-    // std::cout << "safe set " << mpRtree->constraints() << std::endl;
-
-    std::cout << "safety by sampling: " << unsafeTrajectory.empty()
-	      << " safety by cegar: " << cegarCounterex.first << std::endl;
 
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
@@ -259,8 +279,6 @@ bool CegarTest::LoopTest::check() const
 	    {
 		auto mapped = Ariadne::image( nval.value().get().getEnclosure(), mpRtree->dynamics() );
 		printNode( *mpRtree, *vrange.first ); std::cout << " -> " << mapped << std::endl;
-		for( auto v2range = graph::vertices( mpRtree->leafMapping() ); v2range.first != v2range.second; ++v2range.first )
-		    std::cout << "reachable? " << mpRtree->isReachable( *vrange.first, *v2range.second ) << std::endl;
 	    }
 	}
 	
@@ -292,9 +310,10 @@ void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    // addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );                        // alternatingly calling iterate then check is okay
+    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    addTest( new VerifyCounterexamples( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
 }

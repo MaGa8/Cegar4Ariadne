@@ -235,6 +235,18 @@ class IterationCounter : public CegarObserver
 
 struct DebugOutput : public CegarObserver
 {
+    template< typename Rtree >
+    static void printNode( const Rtree& rtree, const typename Rtree::NodeT& n )
+    {
+	auto nVal = rtree.nodeValue( n );
+	if( nVal )
+	    std::cout << nVal.value().get().getEnclosure();
+	else
+	    std::cout << "[outside]";
+	std::cout << " (" << rtree.isSafe( n ) << ") ";
+    }
+
+
     //! \brief called immediatly after the set of initial nodes has been determined, before the start of the loop
     template< typename Rtree >
     void initialized( const Rtree& rtree )
@@ -268,6 +280,12 @@ struct DebugOutput : public CegarObserver
     void processCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
     {
 	std::cout << "process counterexample" << std::endl;
+	for( ; iCounterexBegin != iCounterexEnd; ++iCounterexBegin )
+	{
+	    printNode( rtree, *iCounterexBegin );
+	    std::cout << " -> ";
+	}
+		std::cout << std::endl;	
     }
 
     //! \brief called immediatly before counterexample is checked

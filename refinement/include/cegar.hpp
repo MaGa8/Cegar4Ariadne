@@ -28,9 +28,12 @@ class NodeComparator
 	    , otval2 = mRtree.get().nodeValue( n2 );
 	// always unsafe node is always equal to always unsafe node
 	if( !otval1 && !otval2 )
-	    return true;
-	if( !otval1 || !otval2 )
 	    return false;
+	if( !otval1 )
+	    return false;
+	if( !otval2 )
+	    return true;
+
 	return otval1.value().get().id() < otval2.value().get().id();
     }
 
@@ -69,18 +72,20 @@ void findCounterexample( RefinementTree< E >& rtree
 
     while( iImgBegin != iImgEnd && !guide.terminateSearch() )
     {
-	auto iLoop = std::find_if( path.begin(), path.end()
-				   , std::bind( &RefinementTree< E >::equal, &rtree, *iImgBegin, std::placeholders::_1 ) );
-	if( iLoop == path.end() )
+	auto iVisited = visitMap.find( *iImgBegin );
+	
+	if( iVisited == visitMap.end() || !iVisited->second )
 	{
+	    if( iVisited == visitMap.end() )
+		visitMap.emplace( *iImgBegin, true );
+	    else
+		iVisited->second = true;
+
 	    CounterexampleT< E > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
 	    // counterexample found (could not happen if node was visited before)
 	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
-	    {
 		guide.found( copyPath.begin(), copyPath.end() );
-		// return copyPath;
-	    }
 	    else
 	    {
 		auto posts =  rtree.postimage( *iImgBegin );
@@ -90,6 +95,17 @@ void findCounterexample( RefinementTree< E >& rtree
 	++iImgBegin;
     }
     guide.outOfCounterexamples();
+}
+
+template< typename E, typename NodeIterT, typename GuideT >
+void findCounterexample( RefinementTree< E >& rtree
+			 , NodeIterT iAbstractionsBegin, NodeIterT iAbstractionsEnd
+			 , GuideT& guide
+			 )
+{
+    VisitMap< E > visitMap( {}, NodeComparator( rtree ) );
+    guide.startSearch();
+    findCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd, guide, visitMap );
 }
 
 /*! 
@@ -229,13 +245,8 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	(callStartIteration( observers, rtree ), ... );
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
 	
-	// look for counterexample
-	guide.startSearch(); // move this to find counterexample once search is no longer recursive
+	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide );
 
-	VisitMap< E > visitMap( {}, NodeComparator( rtree ) );
-	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide, visitMap );
-
-	// found possibly many counterexamples
 	(callSearchTerminated( observers, rtree ), ... );
 	
 	if( !guide.hasCounterexample() )
