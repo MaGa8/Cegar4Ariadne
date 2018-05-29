@@ -21,6 +21,19 @@ struct CegarTest : public ITestGroup
     static std::function< Ariadne::ValidatedUpperKleenean( const typename ExactRefinementTree::EnclosureT&
 							   , const Ariadne::BoundedConstraintSet& ) > mIntersectConstraints;
 
+    template< typename E >
+    static E dummy( const E& e ) {return e; }
+
+    template< typename E >
+    static E extractEnclosure( const RefinementTree< E >& rtree, const typename RefinementTree< E >::MappingT::ValueT& val )
+    {
+    	if( val->isInside() )
+    	    return tree::value( rtree.tree()
+				, static_cast< const InsideGraphValue< typename RefinementTree< E >::RefinementT::NodeT >& >( *val ).treeNode() )->getEnclosure();
+    	else
+    	    return E( E::zero( 0 ) );
+    }
+    
     template< typename E, typename R >
     static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
@@ -109,7 +122,7 @@ struct CegarTest : public ITestGroup
 	Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
 
-	Ariadne::BoundedConstraintSet safeSet( { {0, safeWidth}, {0, safeHeight} } );
+	Ariadne::BoundedConstraintSet safeSet( { {-safeWidth, safeWidth}, {-safeHeight, safeHeight} } );
 
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
@@ -262,7 +275,7 @@ struct CegarTest : public ITestGroup
     {
 	static const uint MAX_NODES_FACTOR = 50; // because: 50 * 200 = b10,000
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
-	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
+	    , mSafeSetBoxLengthDist = std::exponential_distribution<>( 0.1 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;

@@ -203,19 +203,21 @@ CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
 
 void CegarTest::LoopTest::iterate()
 {
-    double wid = mInitialBoxLengthDist( mRandom ),
-	hig = mInitialBoxLengthDist( mRandom ),
-	delta = mDeltaDist( mRandom );
-
-    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( wid, hig, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+    double wi = mInitialBoxLengthDist( mRandom )
+	, hi = mInitialBoxLengthDist( mRandom )
+	, ws = mSafeSetBoxLengthDist( mRandom )
+	, hs = mSafeSetBoxLengthDist( mRandom );
     
-    Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
-	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-    Ariadne::RealConstant w = constant( "w", wid )
-	, h = constant( "h", hig )
-	, zero = constant( "zero", 0.0 );
+    mpRtree.reset( henonMap< typename ExactRefinementTree::EnclosureT >( ws, hs, 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+    
+    // Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+    // 	, cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
 
-    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wid - delta}, {0, hig - delta} } ) );
+    // Ariadne::RealConstant w = constant( "w", wid )
+    // 	, h = constant( "h", hig )
+    // 	, zero = constant( "zero", 0.0 );
+
+    mpInitialSet.reset( new Ariadne::BoundedConstraintSet( { {0, wi}, {0, hi} } ) );
 }
 
 bool CegarTest::LoopTest::check() const
@@ -230,12 +232,38 @@ bool CegarTest::LoopTest::check() const
 
     auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
 
+    // std::cout << "initial set " << *mpInitialSet << std::endl;
+    // std::cout << "safe set " << mpRtree->constraints() << std::endl;
+
+    std::cout << "safety by sampling: " << unsafeTrajectory.empty()
+	      << " safety by cegar: " << cegarCounterex.first << std::endl;
+
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
 	std::cout << "found ";
 	for_each( unsafeTrajectory.begin(), unsafeTrajectory.end()
 		  , [] (const Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > >& p) {std::cout << p << " -> "; } );
-	std::cout << std::endl << "but cegar found nothing" << std::endl;
+	std::cout << std::endl << "but cegar found nothing" << std::endl << std::endl;
+	std::cout << "initial set " << *mpInitialSet << std::endl;
+	std::cout << "safe set " << mpRtree->constraints() << std::endl << std::endl;
+	std::cout << "graph " << std::endl;
+	std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > printConv =
+	    std::bind( &CegarTest::extractEnclosure< Ariadne::ExactBoxType >, *mpRtree, std::placeholders::_1 );
+
+	graph::print( std::cout, mpRtree->leafMapping(), printConv );
+
+	for( auto vrange = graph::vertices( mpRtree->leafMapping() ); vrange.first != vrange.second; ++vrange.first )
+	{
+	    auto nval = mpRtree->nodeValue( *vrange.first );
+	    if( nval )
+	    {
+		auto mapped = Ariadne::image( nval.value().get().getEnclosure(), mpRtree->dynamics() );
+		printNode( *mpRtree, *vrange.first ); std::cout << " -> " << mapped << std::endl;
+		for( auto v2range = graph::vertices( mpRtree->leafMapping() ); v2range.first != v2range.second; ++v2range.first )
+		    std::cout << "reachable? " << mpRtree->isReachable( *vrange.first, *v2range.second ) << std::endl;
+	    }
+	}
+	
 	return false;
     }
     else if( unsafeTrajectory.empty() )
@@ -249,9 +277,10 @@ bool CegarTest::LoopTest::check() const
 	}
 	else if( !definitely( cegarCounterex.first ) ) // case: indeterminate
 	{
-	    std::cout << "no points sampled left the initial set but cegar could not verify safety either " << std::endl
+	    std::cout << "no points sampled left the safe set but cegar could not verify safety" << std::endl
 		      << "maybe the maximum number of nodes of cegar should be increased?" << std::endl;
 	}
+	std::cout << std::endl;
     }
 
     return true;
