@@ -4,6 +4,8 @@
 #include "refinementTree.hpp"
 
 #include <vector>
+#include <list>
+#include <random>
 #include <cmath>
 
 template< typename E >
@@ -97,6 +99,49 @@ class KeepRandomCounterexamples : public Guide< E >
     std::uniform_real_distribution<> mDist;
     std::default_random_engine mRandom;
     bool mTerminate;
+};
+
+template< typename E >
+class KeepAllReturnRandomly : public Guide< E >
+{
+  public:
+    KeepAllReturnRandomly()
+	: mRandom( std::random_device()() )
+    {}
+    
+    // clear counterexamples so no interior nodes will be refined
+    //! \brief called before the search is started
+    void startSearch()
+    {
+	mCounters.clear();
+    }
+
+    //! \brief called whenever a counterexample is found
+    template< typename IterT >
+    void found( IterT beginCounterex, const IterT& endCounterex )
+    {
+	mCounters.push_back( CounterexampleT< E >( beginCounterex, endCounterex ) );
+    }
+
+    //! \return true if guide has at least one counterexample
+    bool hasCounterexample() { return mCounters.empty(); }
+
+    //! \return some counterexample
+    CounterexampleT< E > obtain()
+    {
+	auto iCex = mCounters.begin();
+	std::advance( iCex, mDist( mRandom ) % mCounters.size() );
+	auto tmp = *iCex;
+	mCounters.erase( iCex );
+	return tmp;
+    }
+
+    std::string name() const {return "keep_all_return_randomly"; }
+
+  private:
+    std::list< CounterexampleT< E > > mCounters;
+    std::default_random_engine mRandom;
+    std::uniform_int_distribution<> mDist;
 };
 
 
