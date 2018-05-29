@@ -12,6 +12,7 @@
 #include "geometry/set_interface.hpp"
 
 #include <stack>
+#include <map>
 #include <functional>
 
 template< typename E >
@@ -43,6 +44,9 @@ using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 template< typename E >
 using NodeSet = std::set< typename RefinementTree< E >::NodeT, NodeComparator< typename RefinementTree< E >::EnclosureT > >;
 
+template< typename E >
+using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, NodeComparator< E > >;
+
 /*!
   runs DFS to find counterexample
   any path terminates in
@@ -55,14 +59,13 @@ using NodeSet = std::set< typename RefinementTree< E >::NodeT, NodeComparator< t
 */
 template< typename E, typename NodeIterT, typename GuideT >
 void findCounterexample( RefinementTree< E >& rtree
-					 , NodeIterT iImgBegin, NodeIterT iImgEnd
-					 , GuideT& guide
-					 , const std::vector< typename RefinementTree< E >::NodeT >& path = {} )
+			 , NodeIterT iImgBegin, NodeIterT iImgEnd
+			 , GuideT& guide
+			 , VisitMap< E >& visitMap
+			 , const std::vector< typename RefinementTree< E >::NodeT >& path = {}
+			 )
 {
     typedef RefinementTree< E > Rtree;
-
-    // std::stack< std::pair< NodeIterT, NodeIterT > > iterStack;
-    // while( !iterStack.empty() && !guide.terminateSearch()
 
     while( iImgBegin != iImgEnd && !guide.terminateSearch() )
     {
@@ -81,7 +84,7 @@ void findCounterexample( RefinementTree< E >& rtree
 	    else
 	    {
 		auto posts =  rtree.postimage( *iImgBegin );
-		findCounterexample( rtree, posts.begin(), posts.end(), guide, copyPath );
+		findCounterexample( rtree, posts.begin(), posts.end(), guide, visitMap, copyPath );
 	    }
 	}
 	++iImgBegin;
@@ -228,7 +231,9 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	
 	// look for counterexample
 	guide.startSearch(); // move this to find counterexample once search is no longer recursive
-	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide );
+
+	VisitMap< E > visitMap( {}, NodeComparator( rtree ) );
+	findCounterexample( rtree, initialImage.begin(), initialImage.end(), guide, visitMap );
 
 	// found possibly many counterexamples
 	(callSearchTerminated( observers, rtree ), ... );
