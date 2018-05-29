@@ -40,6 +40,8 @@ struct Guide
 
     //! \return some counterexample
     CounterexampleT< E > obtain() {}
+
+    std::string name() const {return "do_nothing"; }
 };
 
 /*!
@@ -86,6 +88,8 @@ class KeepRandomCounterexamples : public Guide< E >
 	mCounterexample.clear();
 	return tmp;
     }
+
+    std::string name() const {return "process_random_counterexample";}
 
   private:
     double mP;

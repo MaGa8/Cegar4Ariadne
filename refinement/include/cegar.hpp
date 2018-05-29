@@ -221,7 +221,7 @@ template< typename E, typename RefinementT, typename LocatorT, template< typenam
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::BoundedConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
-								     , const RefinementT& refinement
+								     , RefinementT refinement
 								     , LocatorT locator
 								     , GuideT< E > guide
 								     , const uint maxNodes

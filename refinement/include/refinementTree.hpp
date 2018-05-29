@@ -425,7 +425,7 @@ class RefinementTree
       \brief refines node v using r and updates
     */
     template< typename R >
-    void refine( const NodeT& v, const R& r )
+    void refine( const NodeT& v, R& r )
     {
 	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
 	// interior node cannot be refined -> do nothing

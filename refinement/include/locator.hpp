@@ -13,6 +13,8 @@
   a locator should implement 
   NodeRefVec operator ()( const RefinementTree< EnclosureT >& rtree, IteratorT ibegin, const IteratorT& iend )
   for NodeRefVec = std::vector< std::reference_wrapper< typename Rtree::NodeT > >
+
+  constexpr string name() const;
  */
 
 template< typename Rtree >
@@ -30,6 +32,8 @@ struct CompleteCounterexample
 	    ns.push_back( std::ref( *ibegin ) );
 	return ns;
     }
+
+    std::string name() const {return "refine_all_states"; }
 };
 
 //! \brief selects random state to refine
@@ -46,6 +50,8 @@ class RandomStates
 	std::advance( ibegin, mDist( mRandom ) % std::distance( ibegin, iend ) );
 	return { *ibegin };
     }
+
+    std::string name() const {return "refine_random_states"; }
   private:
     std::uniform_int_distribution<> mDist;
     std::default_random_engine mRandom;
@@ -72,6 +78,8 @@ struct LargestBox
 					  } );
 	return { *imax };
     }
+    
+    std::string name() const {return "refine_largest_box"; }
 };
 
 template< size_t NSamples >
@@ -127,6 +135,8 @@ class MaximumEntropy
 	std::advance( ibegin, std::distance( scores.begin(), std::max_element( scores.begin(), scores.end() ) ) );
 	return { *ibegin };
     }
+
+    std::string name() const {return "refine_most_heterogenous_state"; }
 
   private:
     std::uniform_real_distribution<> mDist;
