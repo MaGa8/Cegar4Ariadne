@@ -54,7 +54,9 @@ struct AdjacencyDiGraphTest : public ITestGroup
 
     // test classes
     // vector acting as set
-
+    template< typename T >
+    using Gt = AdjacencyDiGraph< T, VecMap, InVec, InVec >;
+    
     typedef AdjacencyDiGraph< int, VecMap, InVec, InVec > G;
     
     // test whether a value can be found in the graph after adding it
@@ -129,7 +131,30 @@ struct AdjacencyDiGraphTest : public ITestGroup
     	int mSrcVal, mTrgVal;
     };
 
-    
+    // test whether objects stored in graph are deleted as often as they are created
+    class MemoryFreed : public ITest
+    {
+      public:
+	class DummyValue
+	{
+	    uint& mCounterRef;
+	    uint mId;
+	  public:
+	    DummyValue( uint& counterRef, const uint& id );
+	    DummyValue( const DummyValue& orig );
+	    DummyValue& operator =( const DummyValue& orig );
+	    ~DummyValue();
+	    bool operator ==( const DummyValue& ) const;
+	};
+
+	MemoryFreed( const uint&, const uint& );
+
+	void iterate(); bool check() const;
+      private:
+	std::unique_ptr< Gt< DummyValue > > mpGraph;
+	uint mObjectCounter = 0, mProduceCounter = 0;
+	std::uniform_int_distribution<> mValDist, mSizeDist;
+    };
     
     GROUP_CTOR_DECL( AdjacencyDiGraphTest );
 

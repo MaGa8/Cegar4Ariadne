@@ -246,11 +246,80 @@ bool LinkedFixedBranchTreeTest::DeleteHeightTest::check() const
     return true;
 }
 
+LinkedFixedBranchTreeTest::MemoryFreed::Dummy::Dummy()
+    : mDefaultConstructed( true ) {}
+
+LinkedFixedBranchTreeTest::MemoryFreed::Dummy::Dummy( uint *counterRef, const uint& id )
+    : mCounterRef( counterRef ), mId( id ), mDefaultConstructed( false ) { ++(*mCounterRef); }
+
+LinkedFixedBranchTreeTest::MemoryFreed::Dummy::Dummy( const Dummy& orig )
+    : mCounterRef( orig.mCounterRef ), mId( orig.mId ), mDefaultConstructed( orig.mDefaultConstructed )
+{
+    if( !mDefaultConstructed )
+	++(*mCounterRef);
+}
+
+LinkedFixedBranchTreeTest::MemoryFreed::Dummy& LinkedFixedBranchTreeTest::MemoryFreed::Dummy::operator =( const Dummy& orig )
+{
+    mId = orig.mId; // no reference rebinding, so leave counter as is
+    return *this;
+}
+
+LinkedFixedBranchTreeTest::MemoryFreed::Dummy::~Dummy()
+{
+    if( !mDefaultConstructed )
+	--(*mCounterRef);
+}
+
+bool LinkedFixedBranchTreeTest::MemoryFreed::Dummy::operator ==( const Dummy& other ) { return this->mId == other.mId; }
+
+LinkedFixedBranchTreeTest::MemoryFreed::MemoryFreed( const uint& testSize, const uint& repetitions )
+    : ITest( "test tree nodes are freed on destruction of tree", testSize, repetitions )
+    , mSizeDist( 0, testSize )
+{}
+
+void LinkedFixedBranchTreeTest::MemoryFreed::MemoryFreed::iterate()
+{
+    mObjectCounter = 0;
+    mCreationCounter = 0;
+    mpTree.reset( new LinkedFixedBranchTree< Dummy, mNoChildren >( Dummy( &mObjectCounter, ++mCreationCounter ) ) );
+
+    for( uint i = 0; i < mSizeDist( mRandom ); ++i )
+    {
+	auto node = tree::root( *mpTree );
+	while( !tree::isLeaf( *mpTree, node ) )
+	{
+	    auto crange = tree::children( *mpTree, node );
+	    std::advance( crange.first, mIntDist( mRandom ) % mNoChildren );
+	    node = *crange.first;
+	}
+	std::array< Dummy, mNoChildren > exvals = {Dummy( &mObjectCounter, ++mCreationCounter )
+						   , Dummy( &mObjectCounter, ++mCreationCounter )
+						   , Dummy( &mObjectCounter, ++mCreationCounter )
+						   , Dummy( &mObjectCounter, ++mCreationCounter ) };
+	tree::expand( *mpTree, node, exvals );
+    }
+    mpTree.reset();
+}
+    
+bool LinkedFixedBranchTreeTest::MemoryFreed::MemoryFreed::check() const
+{
+    if( mObjectCounter != 0 )
+    {
+	std::cout << "out of " << mCreationCounter << " dummy values created "
+		  << mObjectCounter << " are still not deallocated after deletion of tree" << std::endl;
+	return false;
+    }
+    return true;
+}
+
 GROUP_CTOR( LinkedFixedBranchTreeTest, "linked fixed branch tree" )
 
 void LinkedFixedBranchTreeTest::init()
 {
     std::shared_ptr< InterleaveRandomRunner > printerleave( new InterleaveRandomRunner() );
+    std::shared_ptr< StatelessRunner > pStateless( new StatelessRunner() );
+
     addTest( new LeafTest( 3 * mTestSize, mRepetitions ), printerleave );
     addTest( new ExpandSizeTest( 3 * mTestSize, mRepetitions ), printerleave );
     addTest( new ExpandHeightTest( 3 * mTestSize, mRepetitions ), printerleave );
@@ -259,4 +328,5 @@ void LinkedFixedBranchTreeTest::init()
     addTest( new DeleteTest( 0.6 * mTestSize, mRepetitions ), printerleave );
     addTest( new DeleteSizeTest( 0.5 * mTestSize, mRepetitions ), printerleave );
     addTest( new DeleteHeightTest( 0.8 * mTestSize, mRepetitions ), printerleave );
+    addTest( new MemoryFreed( 8 * mTestSize, mRepetitions ), pStateless );
 }

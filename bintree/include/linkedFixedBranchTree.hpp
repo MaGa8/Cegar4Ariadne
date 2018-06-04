@@ -172,6 +172,11 @@ namespace tree
 	    , mSize( 1 )
 	    , mHeight( 1 ) {}
 
+	~LinkedFixedBranchTree()
+	{
+	    delChildren( mRoot );
+	}
+
 	const NodeT& root() const { return mRoot; }
 
 	/*! \return number of nodes in tree */
@@ -225,9 +230,16 @@ namespace tree
 	{
 	    size_t subSize = subtreeSize( *this, n );
 	    for( NodeT& pn : n.mPtr->mChildren )
-		pn.mPtr.reset();
+	    {
+		if( pn.mPtr )
+		{
+		    pn.mPtr->mParent.mPtr.reset();
+		    delChildren( pn );
+		    pn.mPtr.reset();
+		}
+	    }
 	    mSize -= subSize - 1;
-	    mHeight = subtreeHeight( *this, NodeT( mRoot ) ); // this returns the wrong number
+	    mHeight = subtreeHeight( *this, NodeT( mRoot ) );
 	}
       private:
 	NodeT mRoot;

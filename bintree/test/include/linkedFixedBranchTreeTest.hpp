@@ -113,6 +113,35 @@ class LinkedFixedBranchTreeTest : public ITestGroup
 	uint mHeightBefore;
     };
 
+    class MemoryFreed : public ITest
+    {
+      public:
+	class Dummy
+	{
+	  public:
+	    Dummy();
+	    Dummy( uint *counterRef, const uint& id );
+	    Dummy( const Dummy& orig );
+	    Dummy& operator =( const Dummy& orig );
+	    ~Dummy();
+	    bool operator ==( const Dummy& other );
+	  private:
+	    uint *mCounterRef;
+	    uint mId;
+	    bool mDefaultConstructed;
+	};
+	constexpr static uint mNoChildren = 4;
+
+	MemoryFreed( const uint& testSize, const uint& repetitions );
+
+	void iterate();
+	bool check() const;
+      private:
+	std::unique_ptr< LinkedFixedBranchTree< Dummy, mNoChildren > > mpTree;
+	uint mObjectCounter, mCreationCounter;
+	std::uniform_int_distribution< uint > mSizeDist;
+    };
+
     // test delete height
     // generate tree of b=m with n expansions, then delete root
     

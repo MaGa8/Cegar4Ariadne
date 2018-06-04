@@ -331,6 +331,16 @@ namespace graph
 		ieTrg = trg.mPtr->mIns.erase( ieTrg );
 	    return std::make_pair( ieSrc, ieTrg );
 	}
+
+	~AdjacencyDiGraph()
+	{
+	    for( std::pair< T, Node >& n : mVertices )
+	    {
+		n.second.mPtr->mIns.clear();
+		n.second.mPtr->mOuts.clear();
+	    	n.second.mPtr.reset();
+	    }
+	}
 	
       private:
 	// store node

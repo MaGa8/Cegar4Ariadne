@@ -418,12 +418,60 @@ bool AdjacencyDiGraphTest::RemoveEdgeTest::check() const
     return true;
 }
 
+AdjacencyDiGraphTest::MemoryFreed::MemoryFreed( const uint& testSize, const uint& reps )
+    : ITest( "verify allocted nodes are freed upon graph destruction", testSize, reps )
+    , mSizeDist( 0, testSize )
+{}
+
+AdjacencyDiGraphTest::MemoryFreed::DummyValue::DummyValue( uint& counterRef, const uint& id )
+    : mCounterRef( counterRef ), mId( id ) { ++mCounterRef; }
+AdjacencyDiGraphTest::MemoryFreed::DummyValue::DummyValue( const DummyValue& orig )
+    : mCounterRef( orig.mCounterRef ), mId( orig.mId ) { ++mCounterRef; }
+AdjacencyDiGraphTest::MemoryFreed::DummyValue& AdjacencyDiGraphTest::MemoryFreed::DummyValue::operator =( const DummyValue& orig )
+{
+    this->mId = orig.mId;
+    --this->mCounterRef;
+    this->mCounterRef = orig.mCounterRef;
+    ++this->mCounterRef;
+    return *this;
+}
+AdjacencyDiGraphTest::MemoryFreed::DummyValue::~DummyValue() {--mCounterRef; };
+bool AdjacencyDiGraphTest::MemoryFreed::DummyValue::operator ==( const DummyValue& other ) const {return this->mId == other.mId; }
+
+void AdjacencyDiGraphTest::MemoryFreed::iterate()
+{
+    mObjectCounter = 0; mProduceCounter = 0;
+    mpGraph.reset( new Gt< DummyValue >() );
+
+    uint newGraphSize = mSizeDist( mRandom );
+    for( uint i = 0; i < newGraphSize; ++i )
+    {
+	++mProduceCounter;
+	graph::addVertex( *mpGraph, DummyValue( mObjectCounter, mProduceCounter ) );
+    }
+
+    std::uniform_int_distribution<> pickDist( 0, newGraphSize - 1 );
+    randomEdges( *mpGraph, mSizeDist( mRandom ) * mSizeDist( mRandom ) );
+    mpGraph.reset();
+}
+
+bool AdjacencyDiGraphTest::MemoryFreed::check() const
+{
+    if( mObjectCounter != 0 )
+    {
+	std::cout << "out of " << mProduceCounter << " nodes created " << mObjectCounter << " are still in circulation" << std::endl;
+	return false;
+    }
+    return true;
+}
+
 GROUP_CTOR( AdjacencyDiGraphTest, "adjacency directed graph tests" );
 
 void AdjacencyDiGraphTest::init()
 {
     std::shared_ptr< InterleaveRunner > interleave = std::shared_ptr< InterleaveRunner >( new InterleaveRunner() );
     std::shared_ptr< InterleaveRandomRunner > rinterleave = std::shared_ptr< InterleaveRandomRunner >( new InterleaveRandomRunner );
+    std::shared_ptr< StatelessRunner > pStateless( new StatelessRunner() );
 
     uint simpleTestSize = 5 * mTestSize
 	, advancedSize = 0.5 * mTestSize;
@@ -435,4 +483,5 @@ void AdjacencyDiGraphTest::init()
     addTest( new RemoveVertexIncomingTest( advancedSize, mRepetitions ), rinterleave );
     addTest( new RemoveVertexOutgoingTest( advancedSize, mRepetitions ), rinterleave );
     addTest( new RemoveEdgeTest( advancedSize, mRepetitions ), rinterleave );
+    addTest( new MemoryFreed( simpleTestSize, 0.01 * mRepetitions ), pStateless );
 }
