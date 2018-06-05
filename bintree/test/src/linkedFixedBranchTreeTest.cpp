@@ -320,13 +320,13 @@ void LinkedFixedBranchTreeTest::init()
     std::shared_ptr< InterleaveRandomRunner > printerleave( new InterleaveRandomRunner() );
     std::shared_ptr< StatelessRunner > pStateless( new StatelessRunner() );
 
-    addTest( new LeafTest( 3 * mTestSize, mRepetitions ), printerleave );
-    addTest( new ExpandSizeTest( 3 * mTestSize, mRepetitions ), printerleave );
-    addTest( new ExpandHeightTest( 3 * mTestSize, mRepetitions ), printerleave );
-    addTest( new RootTest( 3 * mTestSize, mRepetitions ), printerleave );
-    addTest( new NotRootTest( 3 * mTestSize, mRepetitions ), printerleave );
-    addTest( new DeleteTest( 0.6 * mTestSize, mRepetitions ), printerleave );
+    addTest( new LeafTest( mTestSize, mRepetitions ), printerleave );
+    addTest( new ExpandSizeTest( mTestSize, mRepetitions ), printerleave );
+    addTest( new ExpandHeightTest( mTestSize, mRepetitions ), printerleave );
+    addTest( new RootTest( mTestSize, mRepetitions ), printerleave );
+    addTest( new NotRootTest( mTestSize, mRepetitions ), printerleave );
+    addTest( new DeleteTest( 0.25 * mTestSize, mRepetitions ), printerleave );
     addTest( new DeleteSizeTest( 0.5 * mTestSize, mRepetitions ), printerleave );
-    addTest( new DeleteHeightTest( 0.8 * mTestSize, mRepetitions ), printerleave );
+    addTest( new DeleteHeightTest( 0.25 * mTestSize, mRepetitions ), printerleave );
     addTest( new MemoryFreed( 8 * mTestSize, mRepetitions ), pStateless );
 }

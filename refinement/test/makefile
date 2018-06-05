@@ -5,7 +5,6 @@ MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR)
 INCFLAGS ?= -isystem $(ARIADNE_DIR)/ -isystem $(ARIADNE_DIR)/source/
 LDFLAGS ?= -L $(ARIADNE_DIR)/build/
 LDLIBS ?= -l ariadne
-OPTFLAGS ?= -std=c++17 -Wall
 
 -include $(ROOTDIR)/common.mk
 

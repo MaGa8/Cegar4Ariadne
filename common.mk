@@ -31,7 +31,7 @@ vpath %.cpp $(SRCDIR)/
 vpath %.hpp $(INCDIR)/
 
 export CXX = g++
-export OPTFLAGS
+export OPTFLAGS = -std=c++17 -Wall
 # includes should be locally defined
 RELFLAGS += -O
 DBGFLAGS += -g
