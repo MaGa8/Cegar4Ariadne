@@ -40,16 +40,21 @@ bool CegarTest::FindCounterexampleTest::check() const
 {
     auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
 
-    auto guide = mGuide;
-    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), guide );
+    CounterexampleStore< typename ExactRefinementTree::EnclosureT, RandomStateValue, GreatestState > store( mStateH, mCexH );
+    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), store );
     // system radially diverges
-    if( !guide.hasCounterexample() )
-	return false;
-
-    auto counterex = guide.obtain();
-    if( definitely( !mpRtree->overlapsConstraints( *mpInitial, counterex.front() ) ) )
+    if( !store.hasCounterexample() )
     {
-	D( std::cout << "counterexample does not begin in initial set" << std::endl; );
+	std::cout << "no counterexample obtainable" << std::endl;
+	return false;
+    }
+
+    auto counterex = store.obtain();
+    if( definitely( !mpRtree->overlapsConstraints( *mpInitial, counterex.first.front() ) ) )
+    {
+	std::cout << "counterexample does not begin in initial set" << std::endl;
+	std::cout << "first node ";
+	printNode( *mpRtree, counterex.first.front() );
 	return false;
     }
     return true;
@@ -83,17 +88,17 @@ void CegarTest::FindNoCounterexampleTest::iterate()
 bool CegarTest::FindNoCounterexampleTest::check() const
 {
     auto initialNodes = mpRtree->intersection( *mpInitial, mIntersectConstraints );
-    auto guide = mGuide;
-    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), guide );
+    CounterexampleStore< typename ExactRefinementTree::EnclosureT, RandomStateValue, GreatestState > store( mStateH, mCexH );
+    findCounterexample( *mpRtree, initialNodes.begin(), initialNodes.end(), store );
     // system radially diverges
-    if( guide.hasCounterexample() )
+    if( store.hasCounterexample() )
     {
-	auto counterex = guide.obtain();
-	if( definitely( !mpRtree->isSafe( counterex.back() ) ) &&
-	    definitely( !isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) ) )
+	auto counterex = store.obtain();
+	if( definitely( !mpRtree->isSafe( counterex.first.back() ) ) &&
+	    definitely( !isSpurious( *mpRtree, counterex.first.begin(), counterex.first.end(), *mpInitial, Ariadne::Effort( 10 ) ) ) )
 	{
-	    printCounterexample( *mpRtree, counterex.begin(), counterex.end() );
-	    std::cout << "is spurious " << isSpurious( *mpRtree, counterex.begin(), counterex.end(), *mpInitial, Ariadne::Effort( 10 ) ) << std::endl;
+	    printCounterexample( *mpRtree, counterex.first.begin(), counterex.first.end() );
+	    std::cout << "is spurious " << isSpurious( *mpRtree, counterex.first.begin(), counterex.first.end(), *mpInitial, Ariadne::Effort( 10 ) ) << std::endl;
 	    return false;
 	}
     }
@@ -127,7 +132,7 @@ bool CegarTest::InitialAbstraction::check() const
     CheckInitialSet checkObs( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort );
     KeepInitialSet< ExactRefinementTree > keeper;
 
-    cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, keeper );
+    cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mStateH, mCexH, mMaxNodesFactor * mTestSize, checkObs, keeper );
     if( checkObs.mpIssue )
     {
 	std::cout << "found " << *checkObs.mpIssue << " in initial set, even though it is not in " << *mpInitialSet << std::endl;
@@ -135,13 +140,13 @@ bool CegarTest::InitialAbstraction::check() const
     }
     
     // verify that all final leaf nodes inside the initial set are contained
-    NodeComparator< typename ExactRefinementTree::EnclosureT > ncomp( *mpRtree );
+    ExactRefinementTree::NodeComparator ncomp( *mpRtree );
     for( auto leafRange = mpRtree->leafMapping().vertices(); leafRange.first != leafRange.second; ++leafRange.first )
     {
 	if( definitely( mpRtree->overlapsConstraints( *mpInitialSet, *leafRange.first ) ) )
 	{
 	    auto ifound = std::find_if( keeper.mNodes.begin(), keeper.mNodes.end()
-					, std::bind( &NodeComparator< typename ExactRefinementTree::EnclosureT >::operator()
+					, std::bind( &ExactRefinementTree::NodeComparator::operator()
 						     , &ncomp, *leafRange.first, std::placeholders::_1 ) );
 	    if( ifound == keeper.mNodes.end() )
 	    {
@@ -180,7 +185,7 @@ void CegarTest::VerifySafety::iterate()
 
 bool CegarTest::VerifySafety::check() const
 {
-    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize
+    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize
 			      // , iniPrint, cexPrint
 			      );
     if( !definitely( cegarResult.first ) )
@@ -209,7 +214,7 @@ void CegarTest::VerifyCounterexamples::iterate()
 bool CegarTest::VerifyCounterexamples::check() const
 {
     CounterexampleVerifier verifier;
-    cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize, verifier );
+    cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize, verifier );
 
     if( !verifier.mBadCounterexample.empty() )
     {
@@ -248,7 +253,7 @@ bool CegarTest::LoopTest::check() const
 
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
-    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize );
 
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {

@@ -2,14 +2,58 @@
 #define GUIDE_HPP
 
 #include "refinementTree.hpp"
+#include "counterexampleStore.hpp"
 
 #include <vector>
 #include <list>
 #include <random>
 #include <cmath>
 
-template< typename E >
-using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
+/*!
+  \brief a counterexample heurstic supports
+  double operator ()( const double& a, const double& e )
+  accumulating function with accumulated value a, element e
+  std::string name() ocnst
+*/
+
+struct GreatestState
+{
+    double operator ()( const double& a, const double& e ) const
+    {
+	return a < e ? e : a;
+    }
+
+    std::string name() const
+    {
+	return "greatest_state";
+    }
+};
+
+struct SumStates
+{
+    double operator ()( const double& a, const double& e ) const
+    {
+	return a + e;
+    }
+
+    std::string name() const
+    {
+	return "sum_of_states";
+    }
+};
+
+struct ExpSumStates
+{
+    double operator ()( const double& a, const double& e ) const
+    {
+	return a + std::exp( e );
+    }
+
+    std::string name() const
+    {
+	return "sum_of_exp_states";
+    }
+};
 
 /* 
    guide class should provide

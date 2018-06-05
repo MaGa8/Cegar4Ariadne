@@ -6,38 +6,42 @@
 #include <vector>
 #include <map>
 #include <iterator>
+#include <algorithm>
 
 template< typename E >
-using CounterexampleT = std::vector< RefinementTree< E >::NodeT >;
+using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 
 template< typename E >
 struct ScoredCounterexample
 {
-    typedef std::map< RefinementTree< E >::NodeT, double, RefinementTree< E >::NodeComparator > StateValueMapT;
+    typedef std::vector< std::pair< typename RefinementTree< E >::NodeT, double > > ScorePathT;
 
     template< typename IterT, typename SH >
-    StateValueMapT assignValues( const RefinementTree& rtree, const IterT& cexBegin, const IterT& cexEnd, SH& sh )
+    static ScorePathT assignValues( const RefinementTree< E >& rtree, const IterT& cexBegin, const IterT& cexEnd, SH& sh )
     {
-	StateValueMapT svmap( RefinementTree< E >::NodeComparator( rtree ) );
-	std::transform( cexBegin, cexEnd, std::inserter( svmap ), svmap.end()
-			, [] (auto& s) {return std::make_pair( s, sh( s ) ); } );
-	return svmap;
+	ScorePathT svs;
+	svs.reserve( std::distance( cexBegin, cexEnd ) );
+
+	for( auto istate = cexBegin; istate != cexEnd; ++istate )
+	    svs.push_back( std::make_pair( *istate, sh( rtree, cexBegin, cexEnd, istate ) ) ); // insertion intended
+
+	return svs;
     }
     
     template< typename IterT, typename SH, typename CH >
     ScoredCounterexample( const RefinementTree< E >& rtree, const IterT& cexBegin, const IterT& cexEnd, SH& sh, CH& ch )
 	: mStates( assignValues( rtree, cexBegin, cexEnd, sh ) )
-	, mTotal( std::accumulate( mStates.begin(), mStates.end(),
-				   [&] (const double& val, auto& stateValue) { return ch( val, stateValue.second ); } ) )
+	, mTotal( std::accumulate( mStates.begin(), mStates.end(), 0.0
+				   , [&] (const double& val, auto& stateValue) { return ch( val, stateValue.second ); } ) )
     {}
 
-    std::operator <( const ScoredCounterexample< E >& other )
+    bool operator <( const ScoredCounterexample< E >& other ) const
     {
-	return this->mTotal < other.mTotal;
+	return this->mTotal > other.mTotal;
     }
     
-    const StateValueMapT mStates;
-    const double mTotal;
+    ScorePathT mStates;
+    double mTotal;
 };
 
 /*!
@@ -45,7 +49,7 @@ struct ScoredCounterexample
   \param SH state heuristic: assign score to state, higher scores meaning more suitable for refinement
   \param CH counterexample heuristic: maps states in counterexample and their score to single score
 */
-template< typename SH, typename CH, typename E >
+template< typename E, typename SH, typename CH >
 class CounterexampleStore
 {
   public:
@@ -55,17 +59,21 @@ class CounterexampleStore
 	, mCounterexampleH( counterexampleH )
     {}
 
-    CounterexampleT< E > obtain()
+    std::pair< CounterexampleT< E >, typename RefinementTree< E >::NodeT > obtain()
     {
+	if( !hasCounterexample() )
+	    throw std::runtime_error( "counterexample store does not hold counterexamples but is asked for one" );
+	
 	CounterexampleT< E > ret;
-	if( hasCounterexample() )
-	{
-	    ret.reserve( mCSet.begin()->mStates.size() );
-	    std::transform( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end(), std::back_inserter( ret )
-			    , [] (auto& stateVal) {return stateVal.first;} );
-	    mCSet.erase( mCSet.begin() );
-	}
-	return ret;
+	ret.reserve( mCSet.begin()->mStates.size() );
+	std::transform( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end(), std::back_inserter( ret )
+			, [] (auto& stateVal) {return stateVal.first;} );
+	auto maxStateVal = std::max_element( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end()
+					     , [] (auto& sv1, auto& sv2) {return sv1.second > sv2.second;} );
+
+	mCSet.erase( mCSet.begin() );
+
+	return std::make_pair( ret, maxStateVal->first );
     }
     
     bool hasCounterexample() const
@@ -88,7 +96,7 @@ class CounterexampleStore
     template< typename IterT >
     void found( const RefinementTree< E >& rtree, const IterT& beginCex, const IterT& endCex )
     {
-	mCset.emplace( rtree, beginCex, endCex, mStateH, mCounterexampleH );
+	mCSet.emplace( rtree, beginCex, endCex, mStateH, mCounterexampleH );
     }
 
     //! \todo remove from interface once definitely not needed

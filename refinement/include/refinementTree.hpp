@@ -35,6 +35,31 @@ class RefinementTree
     typedef graph::AdjacencyDiGraph< std::shared_ptr< IGraphValue >, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
 
+    class NodeComparator
+    {
+      public:
+	NodeComparator( const RefinementTree< E >& rtree ) : mRtree( rtree ) {}
+		       
+	bool operator ()( const typename RefinementTree< E >::NodeT& n1
+			  , const typename RefinementTree< E >::NodeT& n2 ) const
+	{
+	    std::optional< std::reference_wrapper< const InteriorTreeValue< E > > > otval1 = mRtree.get().nodeValue( n1 )
+		, otval2 = mRtree.get().nodeValue( n2 );
+	    // always unsafe node is always equal to always unsafe node
+	    if( !otval1 && !otval2 )
+		return false;
+	    if( !otval1 )
+		return false;
+	    if( !otval2 )
+		return true;
+
+	    return otval1.value().get().id() < otval2.value().get().id();
+	}
+
+      private:
+	std::reference_wrapper< const RefinementTree< E > > mRtree;
+    };
+
     template< typename SpaceT >
     static std::function< Ariadne::ValidatedLowerKleenean( const EnclosureT&, const SpaceT& ) > mDummyInsidePredicate = [] (auto& enc, auto& s) {
 	throw std::logic_error( "this predicate should have never been called" ); };

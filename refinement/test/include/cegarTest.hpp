@@ -137,7 +137,8 @@ struct CegarTest : public ITestGroup
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitial;
 	LargestSideRefiner mRefiner;
-	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
 	STATEFUL_TEST( FindCounterexampleTest );
     };
 
@@ -149,7 +150,8 @@ struct CegarTest : public ITestGroup
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitial;
 	LargestSideRefiner mRefiner;
-	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > ( 1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
 	STATEFUL_TEST( FindNoCounterexampleTest );
     };
 
@@ -245,8 +247,8 @@ struct CegarTest : public ITestGroup
     	std::unique_ptr< ExactRefinementTree > mpRtree;
     	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
     	LargestSideRefiner mRefinement;
-    	CompleteCounterexample mLocator;
-    	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
     	std::uniform_real_distribution<> mInitialBoxLengthDist = std::uniform_real_distribution<>( 0, 0.25 );
 	std::exponential_distribution<> mDeltaDist = std::exponential_distribution<>( 1 );
 
@@ -260,8 +262,9 @@ struct CegarTest : public ITestGroup
     	std::unique_ptr< ExactRefinementTree > mpRtree;
     	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
     	LargestSideRefiner mRefinement;
-    	CompleteCounterexample mLocator;
-	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
+
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 10 )
 	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::uniform_real_distribution<> mAttractionDist = std::uniform_real_distribution( 0.1, 0.9 );
@@ -313,8 +316,8 @@ struct CegarTest : public ITestGroup
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;
-	CompleteCounterexample mLocator;
-	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 25 )    
 	    , mSafeBoxLengthDist = std::exponential_distribution<>( 0.01 );                              // narrow initial set, wide safe set => many counterexamples
 
@@ -330,8 +333,8 @@ struct CegarTest : public ITestGroup
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;
-	CompleteCounterexample mLocator;
-	KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT > mGuide = KeepRandomCounterexamples< typename ExactRefinementTree::EnclosureT >( 0.1 );
+	RandomStateValue mStateH;
+	GreatestState mCexH;
 
 	STATELESS_TEST( LoopTest );
     };

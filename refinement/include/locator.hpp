@@ -8,6 +8,72 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
+#include <limits>
+
+/* \brief a state heuristic supports 
+   template< typename Rtree > double operator ()( const Rtree&, const typename Rtree::NodeT )
+   mapping states to real values and
+   std::string name() const 
+   returing a describing name
+*/
+
+class RandomStateValue
+{
+  public:
+    RandomStateValue()
+	: mRandom( std::random_device()() )
+	, mDist( std::numeric_limits< double >::min(), std::numeric_limits< double >::max() )
+    {}
+
+    template< typename Rtree, typename IterT >
+    double operator ()( const Rtree& rtree, const IterT& cexBegin, const IterT& cexEnd, const IterT& istate )
+    {
+	return mDist( mRandom );
+    }
+
+    std::string name() const
+    {
+	return "random state value";
+    }
+    
+  private:
+    std::default_random_engine mRandom;
+    std::uniform_real_distribution< double > mDist;
+};
+
+struct StateVolume
+{
+    template< typename Rtree, typename IterT >
+    double operator ()( const Rtree& rtree, const IterT& cexBegin, const IterT& cexEnd, const IterT& istate )
+    {
+	auto nval = rtree.nodeValue( *istate );
+	if( nval )
+	    return nval.value().get().getEnclosure().measure().get_d();
+	return 0;
+    }
+
+    std::string name() const
+    {
+	return "state volume";
+    }
+};
+
+struct StateSideLength
+{
+    template< typename Rtree, typename IterT >
+    double operator ()( const Rtree& rtree, const IterT& cexBegin, const IterT& cexEnd, const IterT& istate )
+    {
+	auto nval = rtree.nodeValue( *istate );
+	if( nval )
+	    return nval.value().get().getEnclosure().measure().get_d();
+	return 0;
+    }
+
+    std::string name() const
+    {
+	return "state side length";
+    }
+};
 
 /*
   a locator should implement 

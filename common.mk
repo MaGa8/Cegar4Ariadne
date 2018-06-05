@@ -75,7 +75,7 @@ release: setup depend dependencies
 
 $(DEPDIR)/%.d:	%.cpp
 		$(CXX) $(CXXFLAGS) -MM -MT '$$(BUILDDIR)'/$(OBJDIR)/$(basename $(notdir $<)).o -MF $@ $^
-		sed -i 's/\($(OBJDIR)\/[a-Z]\+.o\)/\1 $(subst .,\.,$(subst /,\/,$@))/' $@
+#		sed -i 's/\($$(BUILDDIR)\/$(OBJDIR)\/[a-Z]\+.o\)/$(subst .,\.,$(subst /,\/,$@)) \1/' $@
 		echo -e '\t' '$$(COMPILE.cpp)' -o '$$(BUILDDIR)'/'$$(OBJDIR)'/$(basename $(notdir $@)).o >> $@ $<
 
 $(BUILDDIR)/$(BINDIR)/$(TARGET): $(LOCAL_OBJECTS) $(GLOBAL_OBJECTS)
@@ -95,6 +95,7 @@ dependencies:
 # makes object files
 .PHONY: build
 build: 	setup $(LOCAL_OBJECTS)
+	@echo "build dir is " $(BUILDDIR)
 
 .PHONY: executable
 executable: $(BUILDDIR)/$(BINDIR)/$(TARGET)
