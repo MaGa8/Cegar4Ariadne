@@ -6,7 +6,6 @@
 
 namespace tree
 {
-    blablbabla this is a bug ohohohohnonononoo
     /*!
       \brief specifies types to be defined by a tree of fixed number of branches
       \note non-const types should be implicitly convertible to corresponding const types

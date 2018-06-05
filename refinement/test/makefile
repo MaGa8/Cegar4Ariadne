@@ -1,23 +1,41 @@
 ROOTDIR = ../..
 MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR)
 
+# only set this variables if not in recursion (-> duplication)
+INCFLAGS ?= -isystem $(ARIADNE_DIR)/ -isystem $(ARIADNE_DIR)/source/
+LDFLAGS ?= -L $(ARIADNE_DIR)/build/
+LDLIBS ?= -l ariadne
+OPTFLAGS ?= -std=c++17 -Wall
+
 -include $(ROOTDIR)/common.mk
 
-INCFLAGS += -I $(ARIADNE_DIR)/ -I $(ARIADNE_DIR)/source/
-LIBFLAGS = -L $(ARIADNE_DIR)/build/ -l ariadne -l ariadne-kernel
-OPTFLAGS = -std=c++17 -g -w
+.PHONY: reftree_debug
+reftree_debug: TARGET = runRefinementTreeTest
+reftree_debug: debug
 
-.PHONY: reftree
-reftree: check depend
-	$(makeDependencies)
-	make build
-	$(call makeExecutable,runRefinementTreeTest)
+.PHONY: cegar_debug
+cegar_debug: TARGET = runCegarTest
+cegar_debug: debug
 
-.PHONY: cegar
-cegar: check depend
-	$(makeDependencies)
-	make build
-	$(call makeExecutable,runCegarTest)
+.PHONY: reftree_release
+reftree_release: TARGET = runRefinementTreeTest
+reftree_release: release
+
+.PHONY: cegar_release
+cegar_release: TARGET = runCegarTest
+cegar_release: release
+
+# .PHONY: reftree
+# reftree: check depend
+# 	$(makeDependencies)
+# 	make build
+# 	$(call makeExecutable,runRefinementTreeTest)
+
+# .PHONY: cegar
+# cegar: check depend
+# 	$(makeDependencies)
+# 	make build
+# 	$(call makeExecutable,runCegarTest)
 
 .PHONY: test
 test:
