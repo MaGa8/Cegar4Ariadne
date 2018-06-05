@@ -250,7 +250,7 @@ class RefinementTree
     {
 	auto optSrcVal = nodeValue( src );
 	if( optSrcVal )
-	    isReachable( optSrcVal.value().get().getEnclosure(), trg );
+	    return isReachable( optSrcVal.value().get().getEnclosure(), trg );
 	else
 	    return false;
     }
@@ -262,7 +262,6 @@ class RefinementTree
     // \todo remove this one eventually
     Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue< EnclosureT >& srcVal, const NodeT& trg ) const
     {
-	const EnclosureT& srcEnc = srcVal.getEnclosure();
 	return isReachable( srcVal.getEnclosure(), trg );
     }
     
@@ -440,7 +439,6 @@ class RefinementTree
     	std::array< std::shared_ptr< InteriorTreeValue< EnclosureT > >, RefinementT::N > tvals;
 	for( uint i = 0; i < refined.size(); ++i )
 	{
-	    const EnclosureT& refd = refined[ i ];
 	    tvals[ i ] = typename RefinementT::ValueT( makeLeaf( refined[ i ] ) );
 	}
 	tree::expand( mRefinements, treev, tvals );

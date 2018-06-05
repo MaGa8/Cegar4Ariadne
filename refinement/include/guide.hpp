@@ -32,13 +32,13 @@ struct Guide
     void found( IterT beginCounterex, const IterT& encCounterex ) {}
 
     //! \return true if the search should be terminated
-    bool terminateSearch() {}
+    bool terminateSearch() { return false; }
 
     //! \brief called if all states have been visited
     void outOfCounterexamples() {}
 
     //! \return true if guide has at least one counterexample
-    bool hasCounterexample() {}
+    bool hasCounterexample() { return false; }
 
     //! \return some counterexample
     CounterexampleT< E > obtain() {}

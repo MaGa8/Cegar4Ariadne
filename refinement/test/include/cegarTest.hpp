@@ -77,7 +77,7 @@ struct CegarTest : public ITestGroup
 	Ariadne::Point< Ariadne::Bounds< Ariadne::FloatDP > > mapped = Ariadne::EffectiveVectorFunction::identity( initial.dimension() ).evaluate( initial );
 	path.push_back( mapped );
 	
-	for( int nmap = 0; nmap < noMappings; ++nmap )
+	for( uint nmap = 0; nmap < noMappings; ++nmap )
 	{
 	    mapped = dynamics.evaluate( mapped );
 	    path.push_back( mapped );
@@ -342,4 +342,4 @@ struct CegarTest : public ITestGroup
 };
 
 
-#endif CEGAR_TEST_HPP
+#endif //CEGAR_TEST_HPP

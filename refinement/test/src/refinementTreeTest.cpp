@@ -309,8 +309,8 @@ bool RefinementTreeTest::NonLeafRemovalTest::check() const
 	typename tree::FixedBranchTreeTraits< typename ExactRefinementTree::RefinementT >::CRangeT cs = children( mpRtree->tree(), nex );
 	for( ; cs.first != cs.second; ++cs.first )
 	    toCheck.push( *cs.first );
-	return true;
     }
+    return true;
 }
 
 RefinementTreeTest::TEST_CTOR( PreimageTest, "preimage is complete and only complete" );

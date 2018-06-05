@@ -68,8 +68,6 @@ void findCounterexample( RefinementTree< E >& rtree
 			 , const std::vector< typename RefinementTree< E >::NodeT >& path = {}
 			 )
 {
-    typedef RefinementTree< E > Rtree;
-
     while( iImgBegin != iImgEnd && !guide.terminateSearch() )
     {
 	auto iVisited = visitMap.find( *iImgBegin );

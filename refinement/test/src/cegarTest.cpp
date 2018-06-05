@@ -60,8 +60,6 @@ CegarTest::TEST_CTOR( FindNoCounterexampleTest, "not finds nonexistent counterex
 
 void CegarTest::FindNoCounterexampleTest::init()
 {
-    double boundary = 1.005, delta = -0.006; // cheating a bit, so initial abstraction is within constraint boundary
-
     Ariadne::RealVariable x( "x" ), y( "y" );
     Ariadne::RealConstant b1( "b1", Ariadne::Real( 3.7 ) ), b2( "b2", Ariadne::Real( 3.8 ) );
     Ariadne::EffectiveVectorFunction f = Ariadne::make_function( {x, y}, { b1*x*(1 - x), b2*y*(1 - y)} );
@@ -128,7 +126,6 @@ bool CegarTest::InitialAbstraction::check() const
     Ariadne::Effort effort( 10 );
     CheckInitialSet checkObs( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort );
     KeepInitialSet< ExactRefinementTree > keeper;
-    PrintInitialSet iniPrint;
 
     cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mLocator, mGuide, mMaxNodesFactor * mTestSize, checkObs, keeper );
     if( checkObs.mpIssue )
@@ -183,9 +180,6 @@ void CegarTest::VerifySafety::iterate()
 
 bool CegarTest::VerifySafety::check() const
 {
-    PrintInitialSet iniPrint;
-    PrintCounterexample cexPrint;
-
     auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize
 			      // , iniPrint, cexPrint
 			      );
@@ -253,8 +247,6 @@ bool CegarTest::LoopTest::check() const
 							 , initialBb[ 1 ].upper().get_d() );
 
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
-
-    DebugOutput dbgout;
 
     auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mLocator, mGuide, MAX_NODES_FACTOR * mTestSize );
 
