@@ -5,6 +5,7 @@
 #include "refinement.hpp"
 #include "locator.hpp"
 #include "cegarObserver.hpp"
+#include "termination.hpp"
 #include "counterexampleStore.hpp"
 
 #include "geometry/geometry.hpp"
@@ -190,14 +191,14 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
   \param maxNodes number of nodes in tree after which to stop iterations
   \return pair of kleenean describing safety and sequence of nodes that forms a trajectory starting from the initial set
 */
-template< typename E, typename RefinementT, typename SH, typename CH, typename ... ObserversT >
+template< typename E, typename RefinementT, typename SH, typename CH, typename TermT, typename ... ObserversT >
 std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementTree< E >& rtree
 								     , const Ariadne::BoundedConstraintSet& initialSet
 								     , const Ariadne::Effort& effort
 								     , RefinementT refinement
 								     , const SH& stateH
 								     , const CH& counterexampleH
-								     , const uint maxNodes
+								     , TermT termination
 								     , ObserversT& ... observers )
 {
     typedef RefinementTree< E > Rtree;
@@ -213,8 +214,11 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
     CounterexampleStore< E, SH, CH > counters( stateH, counterexampleH );
 
     (callInitialized(observers, rtree), ...);
-        
-    while( rtree.tree().size() < maxNodes )
+
+    termination.start( rtree );
+    bool terminate = false;
+    
+    while( !terminate )
     {
 	(callStartIteration( observers, rtree ), ... );
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
@@ -229,7 +233,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    return std::make_pair( Ariadne::ValidatedKleenean( true ), std::vector< typename Rtree::NodeT >() );
 	}
 
-	while( counters.hasCounterexample() )
+	while( counters.hasCounterexample() && !terminate )
 	{
 	    auto counterexample = counters.obtain();
 	    (callProcessCounterexample( observers, rtree, counterexample.first.begin(), counterexample.first.end() ), ... );
@@ -275,6 +279,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 		    }
 		}
 	    }
+	    terminate = termination( rtree ); // check in each inner loop for quick response
 	}
     }
     (callFinished( observers, rtree, Ariadne::ValidatedKleenean( Ariadne::indeterminate ) ), ... );
