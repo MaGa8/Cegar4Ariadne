@@ -65,7 +65,7 @@ struct StateSideLength
     {
 	auto nval = rtree.nodeValue( *istate );
 	if( nval )
-	    return nval.value().get().getEnclosure().measure().get_d();
+	    return nval.value().get().getEnclosure().radius().get_d();
 	return 0;
     }
 

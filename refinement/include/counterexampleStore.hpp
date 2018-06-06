@@ -23,7 +23,10 @@ struct ScoredCounterexample
 	svs.reserve( std::distance( cexBegin, cexEnd ) );
 
 	for( auto istate = cexBegin; istate != cexEnd; ++istate )
-	    svs.push_back( std::make_pair( *istate, sh( rtree, cexBegin, cexEnd, istate ) ) ); // insertion intended
+	{
+	    svs.push_back( std::make_pair( *istate, sh( rtree, cexBegin, cexEnd, istate ) ) );
+	}
+	
 
 	return svs;
     }
@@ -33,15 +36,24 @@ struct ScoredCounterexample
 	: mStates( assignValues( rtree, cexBegin, cexEnd, sh ) )
 	, mTotal( std::accumulate( mStates.begin(), mStates.end(), 0.0
 				   , [&] (const double& val, auto& stateValue) { return ch( val, stateValue.second ); } ) )
-    {}
+    {  }
 
     bool operator <( const ScoredCounterexample< E >& other ) const
     {
-	return this->mTotal > other.mTotal;
+	return this->mTotal < other.mTotal;
     }
     
     ScorePathT mStates;
     double mTotal;
+};
+
+template< typename E >
+struct std::greater< ScoredCounterexample< E > >
+{
+    bool operator() (const ScoredCounterexample< E >& x1, const ScoredCounterexample< E >& x2 ) const
+    {
+	return !(x1 < x2);
+    }
 };
 
 /*!
@@ -68,8 +80,11 @@ class CounterexampleStore
 	ret.first.reserve( mCSet.begin()->mStates.size() );
 	std::transform( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end(), std::back_inserter( ret.first )
 			, [] (auto& stateVal) {return stateVal.first;} );
-	ret.second = std::max_element( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end()
-				       , [] (auto& sv1, auto& sv2) {return sv1.second > sv2.second;} )->first;
+
+	auto ispick = std::max_element( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end()
+					, [] (auto& sv1, auto& sv2) {return sv1.second < sv2.second;} );
+	ret.second = ispick->first;
+
 	mCSet.erase( mCSet.begin() );
 
 	return ret;
@@ -123,7 +138,7 @@ class CounterexampleStore
     }
 
   private:
-    typedef std::set< ScoredCounterexample< E > > CSetT;
+    typedef std::set< ScoredCounterexample< E >, std::greater< ScoredCounterexample< E > > > CSetT;
 
     CSetT mCSet;
     SH mStateH;
