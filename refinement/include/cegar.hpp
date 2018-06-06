@@ -250,7 +250,6 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    // \todo get rid of vector
 	    std::vector< std::reference_wrapper< typename Rtree::NodeT > > nodesToRefine = { counterexample.second };
 
-	    
 	    for( const typename Rtree::NodeT& refine : nodesToRefine )
 	    {
 		if( rtree.nodeValue( refine ) )
@@ -260,7 +259,8 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 		    auto iRefined = initialImage.find( refine );
 
 		    (callStartRefinement( observers, rtree, refine ), ... );
-	
+
+		    counters.invalidate( rtree, refine );
 		    rtree.refine( refine, refinement );
 
 		    // find a way to prevent this statement from executing if no observers are passed

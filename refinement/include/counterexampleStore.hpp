@@ -63,17 +63,16 @@ class CounterexampleStore
     {
 	if( !hasCounterexample() )
 	    throw std::runtime_error( "counterexample store does not hold counterexamples but is asked for one" );
-	
-	CounterexampleT< E > ret;
-	ret.reserve( mCSet.begin()->mStates.size() );
-	std::transform( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end(), std::back_inserter( ret )
-			, [] (auto& stateVal) {return stateVal.first;} );
-	auto maxStateVal = std::max_element( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end()
-					     , [] (auto& sv1, auto& sv2) {return sv1.second > sv2.second;} );
 
+	std::pair< CounterexampleT< E >, typename RefinementTree< E >::NodeT > ret;
+	ret.first.reserve( mCSet.begin()->mStates.size() );
+	std::transform( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end(), std::back_inserter( ret.first )
+			, [] (auto& stateVal) {return stateVal.first;} );
+	ret.second = std::max_element( mCSet.begin()->mStates.begin(), mCSet.begin()->mStates.end()
+				       , [] (auto& sv1, auto& sv2) {return sv1.second > sv2.second;} )->first;
 	mCSet.erase( mCSet.begin() );
 
-	return std::make_pair( ret, maxStateVal->first );
+	return ret;
     }
     
     bool hasCounterexample() const
@@ -99,8 +98,24 @@ class CounterexampleStore
 	mCSet.emplace( rtree, beginCex, endCex, mStateH, mCounterexampleH );
     }
 
+    //! \brief signals that n is being invalidated, thus no counterexample containing n should be handed out anymore
+    void invalidate( const RefinementTree< E >& rtree, const typename RefinementTree< E >::NodeT& n )
+    {
+	typename RefinementTree< E >::NodeComparator ncomp( rtree );
+
+	auto icset = mCSet.begin();
+	while( icset != mCSet.end() )
+	{
+	    if( std::any_of( icset->mStates.begin(), icset->mStates.end(), [&] (auto& stateVal) {
+				   return rtree.equal( n, stateVal.first ); } ) )
+		icset = mCSet.erase( icset );
+	    else
+		++icset;
+	}
+    }
+
     //! \todo remove from interface once definitely not needed
-    void outOfCounterexamples() {} // don't care now
+    void outOfCounterexamples() {} // don't care for now
 
     void clear()
     {

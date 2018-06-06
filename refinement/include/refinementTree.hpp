@@ -434,14 +434,14 @@ class RefinementTree
     // }
     
     //! \return true if nodes are equal based on their identifiers, false otherwise
-    bool equal( const NodeT& n1, const NodeT& n2 )
+    bool equal( const NodeT& n1, const NodeT& n2 ) const
     {
 	auto val1 = nodeValue( n1 ), val2 = nodeValue( n2 );
 	if( val1 && val2 )
-	    val1.value().get() == val2.value().get();
+	    return val1.value().get() == val2.value().get();
 	else if( !val1 && !val2 )
 	    return true;
-	else false;
+	return false;
     }
 
     /*! 
