@@ -192,7 +192,7 @@ class RefinementTree
     //! \param pred function overapproximating whether enclosure and space intersect
     template< typename ConstraintSetT >
     std::vector< NodeT > intersection( const typename RefinementT::NodeT& subRoot, const ConstraintSetT& s
-				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred )
+				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred ) const
     {
 	std::vector< NodeT > abs = intersectionRecursive( subRoot, s, pred );
 	// relates is applied to outside node, so dummy is never called
@@ -203,7 +203,7 @@ class RefinementTree
 
     template< typename ConstraintSetT >
     std::vector< NodeT > intersection( const ConstraintSetT& s
-				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred )
+				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred ) const
     {
 	return intersection( tree::root( tree() ), s, pred );
     }

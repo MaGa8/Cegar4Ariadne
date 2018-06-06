@@ -36,7 +36,7 @@ using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, typename R
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
 template< typename E, typename NodeIterT, typename SH, typename CH >
-void findCounterexample( RefinementTree< E >& rtree
+void findCounterexample( const RefinementTree< E >& rtree
 			 , NodeIterT iImgBegin, NodeIterT iImgEnd
 			 , CounterexampleStore< E, SH, CH >& counterStore
 			 , VisitMap< E >& visitMap
