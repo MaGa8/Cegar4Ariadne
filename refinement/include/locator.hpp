@@ -33,7 +33,7 @@ class RandomStateValue
 
     std::string name() const
     {
-	return "random state value";
+	return "random_state_value";
     }
     
   private:
@@ -54,7 +54,7 @@ struct StateVolume
 
     std::string name() const
     {
-	return "state volume";
+	return "state_volume";
     }
 };
 
@@ -71,8 +71,35 @@ struct StateSideLength
 
     std::string name() const
     {
-	return "state side length";
+	return "state_side_length";
     }
+};
+
+struct StateVolumeDifference
+{
+    //! \param endpointFactor factor to multiply volume with if no next state is available
+    StateVolumeDifference( const double& endpointFactor ) : mEndpointFactor( endpointFactor ) {}
+    
+    template< typename Rtree, typename IterT >
+    double operator ()( const Rtree& rtree, const IterT& cexBegin, const IterT& cexEnd, const IterT& istate ) const
+    {
+	IterT iNextState = istate; ++iNextState;
+	auto sval = rtree.nodeValue( *istate );
+	if( iNextState != cexEnd && sval )
+	{
+	    auto nextVal = rtree.nodeValue( *iNextState );
+	    if( nextVal )
+		return std::abs( (sval.value().get().getEnclosure().measure() - nextVal.value().get().getEnclosure().measure() ).get_d() );
+	}
+
+	if( sval ) // next state either not there or outside
+	    return sval.value().get().getEnclosure().measure().get_d() * mEndpointFactor;
+	return 0.0; // is outside
+    }
+
+    std::string name() const { return "state_volume_difference"; }
+
+    const double mEndpointFactor;
 };
 
 /*

@@ -46,7 +46,7 @@ Ariadne::Colour stateColor( const Rtree& rtree, const InisetT& initialSet, const
 	else
 	    return Ariadne::Colour( 1, 0.7, 0 );
     }
-    return Ariadne::black;
+    return Ariadne::white;
 }
 
 template< typename E, typename InisetT >
@@ -65,11 +65,11 @@ Ariadne::Figure visualize( const RefinementTree< E >& rtree, const InisetT& init
     for( auto vs = graph::vertices( rtree.leafMapping() ); vs.first != vs.second; ++vs.first )
     {
 	auto vval = rtree.nodeValue( *vs.first );
-	auto imapEntry = reachMap.find( *vs.first );
-	if( vval && imapEntry != reachMap.end() )
+	if( vval )
 	{
 	    auto tv = vval.value().get();
-	    fig.set_fill_colour( stateColor( rtree, initialSet, tv, imapEntry->second ) );
+	    auto imapEntry = reachMap.find( *vs.first );
+	    fig.set_fill_colour( stateColor( rtree, initialSet, tv, imapEntry != reachMap.end() && imapEntry->second ) );
 	    fig.draw( tv.getEnclosure() );
 	}
     }

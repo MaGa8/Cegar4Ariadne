@@ -233,6 +233,27 @@ class IterationCounter : public CegarObserver
     uint mIterations;
 };
 
+class CounterexampleLengthAverage : public CegarObserver
+{
+  public:
+    CounterexampleLengthAverage()
+	: mAvg( 0.0 ), mNums( 0 )
+    {}
+
+    double average() const {return mAvg;}
+
+    template< typename Rtree, typename IterT >
+    void processCounterexample( const Rtree& rtree, IterT iCounterexBegin, const IterT& iCounterexEnd )
+    {
+	++mNums;
+	mAvg = ( (mNums - 1)*mAvg + std::distance( iCounterexBegin, iCounterexEnd ) ) / mNums; // avoid large numbers by just summing
+    }
+
+  private:
+    double mAvg;
+    uint mNums;
+};
+
 struct DebugOutput : public CegarObserver
 {
     template< typename Rtree >
