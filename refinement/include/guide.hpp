@@ -168,7 +168,7 @@ class KeepAllReturnRandomly : public Guide< E >
     }
 
     //! \return true if guide has at least one counterexample
-    bool hasCounterexample() { return mCounters.empty(); }
+    bool hasCounterexample() { return !mCounters.empty(); }
 
     //! \return some counterexample
     CounterexampleT< E > obtain()
