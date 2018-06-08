@@ -249,6 +249,7 @@ struct CegarTest : public ITestGroup
     	LargestSideRefiner mRefinement;
 	RandomStateValue mStateH;
 	GreatestState mCexH;
+	LimitedIterations mTerm;
     	std::uniform_real_distribution<> mInitialBoxLengthDist = std::uniform_real_distribution<>( 0, 0.25 );
 	std::exponential_distribution<> mDeltaDist = std::exponential_distribution<>( 1 );
 
@@ -258,13 +259,13 @@ struct CegarTest : public ITestGroup
     // verify safety of trivially safe system
     class VerifySafety : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 100;
+	static const uint mMaxNodesFactor = 100;
     	std::unique_ptr< ExactRefinementTree > mpRtree;
     	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
     	LargestSideRefiner mRefinement;
 	RandomStateValue mStateH;
 	GreatestState mCexH;
-
+	LimitedIterations mTerm;
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 10 )
 	    , mDeltaDist = std::exponential_distribution<>( 0.5 );
 	std::uniform_real_distribution<> mAttractionDist = std::uniform_real_distribution( 0.1, 0.9 );
@@ -312,12 +313,13 @@ struct CegarTest : public ITestGroup
     //! \class tests that successive states in counterexamples are reachable
     class VerifyCounterexamples : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 25;
+	static const uint mMaxNodesFactor = 25;
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;
 	RandomStateValue mStateH;
 	GreatestState mCexH;
+	LimitedIterations mTerm;
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 25 )    
 	    , mSafeBoxLengthDist = std::exponential_distribution<>( 0.01 );                              // narrow initial set, wide safe set => many counterexamples
 
@@ -327,7 +329,7 @@ struct CegarTest : public ITestGroup
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
-	static const uint MAX_NODES_FACTOR = 100; // because: 50 * 200 = b10,000
+	static const uint mMaxNodesFactor = 100; // because: 50 * 200 = b10,000
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
 	    , mSafeSetBoxLengthDist = std::exponential_distribution<>( 0.1 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;
@@ -335,6 +337,7 @@ struct CegarTest : public ITestGroup
 	LargestSideRefiner mRefinement;
 	RandomStateValue mStateH;
 	GreatestState mCexH;
+	LimitedIterations mTerm;
 
 	STATELESS_TEST( LoopTest );
     };

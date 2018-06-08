@@ -36,7 +36,7 @@ export OPTFLAGS = -std=c++17 -Wall
 RELFLAGS += -O
 DBGFLAGS += -g
 INCFLAGS += -I $(INCDIR)/ $(foreach mod,$(MODULES),-I $(mod)/$(INCDIR)/ )
-CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -O2
+CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -g
 # libraries should be locally defined
 
 LOCAL_SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp) )

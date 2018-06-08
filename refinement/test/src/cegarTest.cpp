@@ -105,7 +105,10 @@ bool CegarTest::FindNoCounterexampleTest::check() const
     return true;
 }
 
-CegarTest::TEST_CTOR( InitialAbstraction, "initial abstractions are complete and only complete" );
+CegarTest::InitialAbstraction::InitialAbstraction( uint size, uint repetitions )
+    : ITest( "initial abstractions are complete and only complete", size, repetitions )
+    , mTerm( size * mMaxNodesFactor )
+{}
 
 void CegarTest::InitialAbstraction::iterate()
 {
@@ -132,7 +135,7 @@ bool CegarTest::InitialAbstraction::check() const
     CheckInitialSet checkObs( *mpRtree, Ariadne::ConstraintSet( mpInitialSet->constraints() ), effort );
     KeepInitialSet< ExactRefinementTree > keeper;
 
-    cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mStateH, mCexH, mMaxNodesFactor * mTestSize, checkObs, keeper );
+    cegar( *mpRtree, *mpInitialSet, effort, mRefinement, mStateH, mCexH, mTerm, checkObs, keeper );
     if( checkObs.mpIssue )
     {
 	std::cout << "found " << *checkObs.mpIssue << " in initial set, even though it is not in " << *mpInitialSet << std::endl;
@@ -161,7 +164,10 @@ bool CegarTest::InitialAbstraction::check() const
     return true;
 }
 
-CegarTest::TEST_CTOR( VerifySafety, "verify safe by construction system" );
+CegarTest::VerifySafety::VerifySafety( uint size, uint repetitions )
+    : ITest( "verify safe by construction system", size, repetitions )
+    , mTerm( size * mMaxNodesFactor )
+{}
 
 void CegarTest::VerifySafety::iterate()
 {
@@ -185,7 +191,7 @@ void CegarTest::VerifySafety::iterate()
 
 bool CegarTest::VerifySafety::check() const
 {
-    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize
+    auto cegarResult = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, mTerm
 			      // , iniPrint, cexPrint
 			      );
     if( !definitely( cegarResult.first ) )
@@ -198,7 +204,10 @@ bool CegarTest::VerifySafety::check() const
     return true;
 }
 
-CegarTest::TEST_CTOR( VerifyCounterexamples, "verify consecutive nodes in counterexample are reachable" )
+CegarTest::VerifyCounterexamples::VerifyCounterexamples( uint size, uint reps )
+    : ITest( "verify consecutive nodes in counterexample are reachable", size, reps )
+    , mTerm( mMaxNodesFactor * size )
+{}
 
 void CegarTest::VerifyCounterexamples::iterate()
 {
@@ -214,7 +223,7 @@ void CegarTest::VerifyCounterexamples::iterate()
 bool CegarTest::VerifyCounterexamples::check() const
 {
     CounterexampleVerifier verifier;
-    cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize, verifier );
+    cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, mTerm, verifier );
 
     if( !verifier.mBadCounterexample.empty() )
     {
@@ -230,7 +239,10 @@ bool CegarTest::VerifyCounterexamples::check() const
     return true;
 }
 
-CegarTest::TEST_CTOR( LoopTest, "whole cegar loop" )
+CegarTest::LoopTest::LoopTest( uint size, uint reps )
+    : ITest( "whole cegar loop", size, reps )
+    , mTerm( mMaxNodesFactor * size )
+{}
 
 void CegarTest::LoopTest::iterate()
 {
@@ -253,7 +265,7 @@ bool CegarTest::LoopTest::check() const
 
     auto unsafeTrajectory = findUnsafeTrajectory( widthDist, heightDist, mpRtree->dynamics(), mpRtree->constraints(), mTestSize, mTestSize );
 
-    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, MAX_NODES_FACTOR * mTestSize );
+    auto cegarCounterex = cegar( *mpRtree, *mpInitialSet, Ariadne::Effort( 10 ), mRefinement, mStateH, mCexH, mTerm );
 
     if( !unsafeTrajectory.empty() && definitely( cegarCounterex.first ) )
     {
