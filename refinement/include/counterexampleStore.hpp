@@ -71,6 +71,7 @@ class CounterexampleStore
 	, mCounterexampleH( counterexampleH )
     {}
 
+    //! \return counterexample and most preferred state for refinement
     std::pair< CounterexampleT< E >, typename RefinementTree< E >::NodeT > obtain()
     {
 	if( !hasCounterexample() )
