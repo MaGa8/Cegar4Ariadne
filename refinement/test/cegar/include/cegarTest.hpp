@@ -24,12 +24,12 @@ struct CegarTest : public ITestGroup
     template< typename E >
     static E dummy( const E& e ) {return e; }
 
+    //! \todo remove rtree parameter
     template< typename E >
     static E extractEnclosure( const RefinementTree< E >& rtree, const typename RefinementTree< E >::MappingT::ValueT& val )
     {
     	if( val->isInside() )
-    	    return tree::value( rtree.tree()
-				, static_cast< const InsideGraphValue< typename RefinementTree< E >::RefinementT::NodeT >& >( *val ).treeNode() )->getEnclosure();
+    	    return static_cast< const InsideGraphValue< E >& >( *val ).getEnclosure();
     	else
     	    return E( E::zero( 0 ) );
     }
@@ -37,9 +37,17 @@ struct CegarTest : public ITestGroup
     template< typename E, typename R >
     static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
-	auto ls = rt.leaves();
+	auto vrange = graph::vertices( rt.graph() );
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
-	typename RefinementTree< E >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
+	typename RefinementTree< E >::NodeT n;
+	do
+	{
+	    uint jump = std::uniform_int_distribution<>( 0, std::distance( vrange.first, vrange.second ) - 1 )( mRandom );
+	    auto irefine = vrange.first;
+	    std::advance( irefine, jump );
+	    n = *irefine;
+	} while( rt.equal( rt.outside(), n ) );
+							
 	rt.refine( n, refiner );
 	return n;
     }
@@ -49,7 +57,7 @@ struct CegarTest : public ITestGroup
     {
 	auto nVal = rtree.nodeValue( n );
 	if( nVal )
-	    std::cout << nVal.value().get().getEnclosure();
+	    std::cout << nVal.value().get();
 	else
 	    std::cout << "[outside]";
 	std::cout << " (" << rtree.isSafe( n ) << ") ";
@@ -123,7 +131,7 @@ struct CegarTest : public ITestGroup
 	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
 
 	Ariadne::BoundedConstraintSet safeSet( { {-safeWidth, safeWidth}, {-safeHeight, safeHeight} } );
-
+	
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
 	Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - fa*x*x + y, fb*x} );
@@ -313,7 +321,7 @@ struct CegarTest : public ITestGroup
     //! \class tests that successive states in counterexamples are reachable
     class VerifyCounterexamples : public ITest
     {
-	static const uint mMaxNodesFactor = 25;
+	static const uint mMaxNodesFactor = 10;
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	std::unique_ptr< Ariadne::BoundedConstraintSet > mpInitialSet;
 	LargestSideRefiner mRefinement;
@@ -329,7 +337,7 @@ struct CegarTest : public ITestGroup
     // test that counterexample with single broken link is detected
     class LoopTest : public ITest
     {
-	static const uint mMaxNodesFactor = 100; // because: 50 * 200 = b10,000
+	static const uint mMaxNodesFactor = 100; // because: 100 * 100 (test size) = 10,000
 	std::exponential_distribution<> mInitialBoxLengthDist = std::exponential_distribution<>( 3 ) // so mean is 0.33, quite close to safe region
 	    , mSafeSetBoxLengthDist = std::exponential_distribution<>( 0.1 );
 	std::unique_ptr< ExactRefinementTree > mpRtree;

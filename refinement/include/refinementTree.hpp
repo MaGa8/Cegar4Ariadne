@@ -42,7 +42,7 @@ class RefinementTree
 	bool operator ()( const typename RefinementTree< E >::NodeT& n1
 			  , const typename RefinementTree< E >::NodeT& n2 ) const
 	{
-	    std::optional< std::reference_wrapper< const InteriorTreeValue< E > > > otval1 = mRtree.get().nodeValue( n1 )
+	    auto otval1 = mRtree.get().nodeValue( n1 )
 		, otval2 = mRtree.get().nodeValue( n2 );
 	    // always unsafe node is always equal to always unsafe node
 	    if( !otval1 && !otval2 )
@@ -181,7 +181,7 @@ class RefinementTree
 	auto vrange = graph::vertices( graph() );
 	std::copy_if( vrange.first, vrange.second, std::back_inserter( inters )
 		      , [this, &s, &largeM] (auto& gn) {
-			    return possibly( overlapsConstraints( s, gn, largeM ) ); } );
+			    return possibly( overlapsConstraints( s, gn ) ); } );
 	return inters;
     }
 
@@ -269,7 +269,7 @@ class RefinementTree
 
     //! \note: don't use this method! breaks in case n == outsideNode()
     //! \return true if n overlaps with constraint
-    Ariadne::ValidatedUpperKleenean overlapsConstraints( const Ariadne::BoundedConstraintSet& constraintSet, const NodeT& n, const double& m ) const
+    Ariadne::ValidatedUpperKleenean overlapsConstraints( const Ariadne::BoundedConstraintSet& constraintSet, const NodeT& n ) const
     {
     	auto nval = nodeValue( n );
     	if( nval )
@@ -315,17 +315,19 @@ class RefinementTree
     /*! 
       \param v leaf node in refinement tree
       \brief refines node v using r and updates
+      \return vector of refined nodes
     */
     template< typename R >
-    void refine( NodeT v, R& r ) // may not reference v, because modification of mMapping may cause reallocation of vertex container
+    std::vector< NodeT > refine( NodeT v, R& r ) // may not reference v, because modification of mMapping may cause reallocation of vertex container
     {
 	auto vval = nodeValue( v );
+	std::vector< NodeT > refinedStates;
 	if( !vval )
-	    return;
+	    return refinedStates;
 
 	// make new tree values
     	std::vector< EnclosureT > refinedEnclosures = r( vval.value().get().getEnclosure() );
-	std::vector< NodeT > refinedStates; refinedStates.reserve( refinedEnclosures.size() );
+	refinedStates.reserve( refinedEnclosures.size() );
 	// map to outside node directly
 	for( auto& refEnc : refinedEnclosures )
 	    refinedStates.push_back( addState( refEnc ) );
@@ -334,6 +336,7 @@ class RefinementTree
     	
 	// unlink v from the graph after its connectivity is no longer needed
 	graph::removeVertex( mMapping, v );
+	return refinedStates;
     }
 
   private:

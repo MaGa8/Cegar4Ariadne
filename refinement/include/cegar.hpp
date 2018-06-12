@@ -131,7 +131,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
     typedef RefinementTree< E > Rtree;
     
     // determine: initial set and first state of counterexample intersect
-    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oBeginCex = rtree.nodeValue( *beginCounter );
+    auto oBeginCex = rtree.nodeValue( *beginCounter );
 
     if( !oBeginCex )
     {
@@ -258,24 +258,23 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    {
 		if( rtree.nodeValue( refine ) )
 		{
-		    const typename Rtree::RefinementT::NodeT& treeNodeRef =
-			static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
 		    auto iRefined = initialImage.find( refine );
 
 		    (callStartRefinement( observers, rtree, refine ), ... );
 
 		    counters.invalidate( rtree, refine );
-		    rtree.refine( refine, refinement );
-
-		    // find a way to prevent this statement from executing if no observers are passed
-		    auto refinedNodes = rtree.leaves( treeNodeRef ); 
+		    auto refinedNodes = rtree.refine( refine, refinement );
+		    
 		    (callRefined( observers, rtree, refinedNodes.begin(), refinedNodes.end() ), ... );
 	 
 		    if( iRefined != initialImage.end() )
 		    {
 			initialImage.erase( iRefined );
-			auto refinedInitials = rtree.intersection( treeNodeRef, initialSet, interPred );
-			initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
+			for( auto& nrefd : refinedNodes )
+			{
+			    if( possibly( rtree.overlapsConstraints( initialSet, nrefd ) ) )
+				initialImage.insert( nrefd );
+			}
 		    }
 		}
 	    }

@@ -4,7 +4,7 @@
 #include <limits>
 
 #ifndef DEBUG
-#define DEBUG false
+#define DEBUG true
 #endif
 
 std::default_random_engine CegarTest::mRandom = std::default_random_engine( std::random_device()() );
@@ -144,7 +144,7 @@ bool CegarTest::InitialAbstraction::check() const
     
     // verify that all final leaf nodes inside the initial set are contained
     ExactRefinementTree::NodeComparator ncomp( *mpRtree );
-    for( auto leafRange = mpRtree->leafMapping().vertices(); leafRange.first != leafRange.second; ++leafRange.first )
+    for( auto leafRange = mpRtree->graph().vertices(); leafRange.first != leafRange.second; ++leafRange.first )
     {
 	if( definitely( mpRtree->overlapsConstraints( *mpInitialSet, *leafRange.first ) ) )
 	{
@@ -197,7 +197,7 @@ bool CegarTest::VerifySafety::check() const
     if( !definitely( cegarResult.first ) )
     {
 	std::cout << "could not verify safety of system safe by construction, safety " << cegarResult.first
-		  << " after expanding " << mpRtree->tree().size() << " nodes "
+		  << " with " << graph::size( mpRtree->graph() ) << " nodes "
 		  << std::endl;
 	return false;
     }
@@ -211,6 +211,7 @@ CegarTest::VerifyCounterexamples::VerifyCounterexamples( uint size, uint reps )
 
 void CegarTest::VerifyCounterexamples::iterate()
 {
+    D( std::cout << "verify counterexamples iteration" << std::endl; );
     double wi = mInitialBoxLengthDist( mRandom )
 	, hi = mInitialBoxLengthDist( mRandom )
 	, ws = mSafeBoxLengthDist( mRandom )
@@ -279,9 +280,9 @@ bool CegarTest::LoopTest::check() const
 	std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > printConv =
 	    std::bind( &CegarTest::extractEnclosure< Ariadne::ExactBoxType >, *mpRtree, std::placeholders::_1 );
 
-	graph::print( std::cout, mpRtree->leafMapping(), printConv );
+	graph::print( std::cout, mpRtree->graph(), printConv );
 
-	for( auto vrange = graph::vertices( mpRtree->leafMapping() ); vrange.first != vrange.second; ++vrange.first )
+	for( auto vrange = graph::vertices( mpRtree->graph() ); vrange.first != vrange.second; ++vrange.first )
 	{
 	    auto nval = mpRtree->nodeValue( *vrange.first );
 	    if( nval )
@@ -319,10 +320,10 @@ void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    addTest( new VerifyCounterexamples( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
-    addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new InitialAbstraction( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    // addTest( new VerifySafety( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
+    addTest( new VerifyCounterexamples( mTestSize, 0.05 * mRepetitions ), pStateless );
+    // addTest( new LoopTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pStateless );
 }
