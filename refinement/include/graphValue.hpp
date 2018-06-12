@@ -36,7 +36,7 @@ class InsideGraphValue : public IGraphValue
     //! \return true if the box stored is completely covered by all constraints, indeterminate if it lies within the initial abstraction but is not covered completely by all constraints and false if it lies outside of the initial abstraction
     Ariadne::ValidatedKleenean isSafe() const { return mSafe; }
 
-    bool operator ==( const AbstractInteriorTreeValue< EnclosureT >& tv ) const
+    bool operator ==( const InsideGraphValue< EnclosureT >& tv ) const
     {
 	return this->mId == tv.mId;
     }
@@ -52,5 +52,17 @@ struct OutsideGraphValue : public IGraphValue
 {
     bool isInside() const { return false; }
 };
+
+template< typename CharT, typename TraitsT, typename E >
+std::basic_ostream< CharT, TraitsT >& operator <<( std::basic_ostream< CharT, TraitsT >& os, const InsideGraphValue< E >& val )
+{
+    return os << val.id() << ": " << val.getEnclosure() << " (" << val.isSafe() << ") ";
+}
+
+template< typename CharT, typename TraitsT >
+std::basic_ostream< CharT, TraitsT >& operator <<( std::basic_ostream< CharT, TraitsT >& os, const OutsideGraphValue& val )
+{
+    return os << "[outside] ";
+}
 
 #endif

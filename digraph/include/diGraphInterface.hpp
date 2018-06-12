@@ -161,6 +161,11 @@ namespace graph
     // 	return nonConstIn;
     // }
 
+    //! \note calls size() method of g by default
+    //! \return number of nodes in g
+    template< typename G >
+    size_t size( const G& g ) { return g.size(); }
+
     //! \brief add new node for value v to g assuming v is unique
     //! \return iterator to vertex added
     template< typename G >

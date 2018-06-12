@@ -264,6 +264,8 @@ namespace graph
 	    return e.mTarget;
 	}
 
+	size_t size() const {return mVertices.size(); }
+
 	//! \return iterator to vertex added
 	VIterT addVertex( const ValueT& v )
 	{

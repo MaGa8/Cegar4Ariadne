@@ -32,8 +32,8 @@ struct RefinementTreeTest : public ITestGroup
 	{
 	    if( val->isInside() )
 	    {
-		auto& inVal = static_cast< InsideGraphValue< typename RefinementTree< E >::RefinementT::NodeT >& >( *val );
-		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
+		auto& inVal = static_cast< InsideGraphValue< E >& >( *val );
+		return inVal.getEnclosure();
 	    }
 	    else
 		return E::zero( 2 ); // hard coded cause using 2d tests only
@@ -46,9 +46,17 @@ struct RefinementTreeTest : public ITestGroup
     template< typename E, typename R >
     static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
-	auto ls = rt.leaves();
+	auto vrange = graph::vertices( rt.graph() );
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
-	typename RefinementTree< E >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
+	typename RefinementTree< E >::NodeT n;
+	do
+	{
+	    uint jump = std::uniform_int_distribution<>( 0, std::distance( vrange.first, vrange.second ) - 1 )( mRandom );
+	    auto irefine = vrange.first;
+	    std::advance( irefine, jump );
+	    n = *irefine;
+	} while( rt.equal( rt.outside(), n ) );
+							
 	rt.refine( n, refiner );
 	return n;
     }
@@ -59,16 +67,10 @@ struct RefinementTreeTest : public ITestGroup
 	LargestSideRefiner refiner;
 	for( uint i = 0; i < depth; ++i )
 	{
-	    auto lvs = rt.leaves();
-	    for( typename RefinementTree< E >::NodeT& lf : lvs )
-		rt.refine( lf, refiner );
+	    auto vrange = graph::vertices( rt.graph() );
+	    for( auto inode = vrange.first; inode != vrange.second; ++inode )
+		rt.refine( *inode, refiner );
 	}
-    }
-
-    template< typename E >
-    static bool nodeEquals( const RefinementTree< E >& rt, const typename RefinementTree< E >::NodeT& n1, const typename RefinementTree< E >::NodeT& n2 )
-    {
-	return rt.nodeValue( n1 ) == rt.nodeValue( n2 );
     }
 
     template< typename IntervalT >
@@ -85,8 +87,8 @@ struct RefinementTreeTest : public ITestGroup
 							    , f, Ariadne::Effort( 5 ) );
     }
 
-    template< typename RefTree >
-    static void printNodeValue( const std::optional< std::reference_wrapper< const InteriorTreeValue< typename RefTree::EnclosureT > > > otn )
+    template< typename E >
+    static void printNodeValue( const std::optional< std::reference_wrapper< const InsideGraphValue< E > > >& otn )
     {
 	if( otn )
 	    std::cout << otn.value().get().getEnclosure() << " ";
@@ -94,25 +96,14 @@ struct RefinementTreeTest : public ITestGroup
 	    std::cout << "[unsafe] ";
     }
     
-    // test expansion:
-    // proper number of nodes in graph: number of refinements - 1
-    // proper depth: increasing if refining deepest level node otherwise stagnant
-    class ExpansionTest : public ITest
-    {
-	std::unique_ptr< ExactRefinementTree > mpRtree;
-	LargestSideRefiner mRefiner;
-	const uint EXPANSION_SIZE;
-	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
-	STATEFUL_TEST( ExpansionTest );
-    };
-    
     // test leaves after couple of expansions
-    class LeavesTest : public ITest
+    class SizeTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	const uint EXPANSION_SIZE = 2;
+	LargestSideRefiner mRefiner;
 	uint mExpansionCounter;
-	STATEFUL_TEST( LeavesTest );
+	STATEFUL_TEST( SizeTest );
     };
 
     // test intersection: brute force all leaves and test for intersection
@@ -126,17 +117,17 @@ struct RefinementTreeTest : public ITestGroup
     // test intersection with random circular constraint set
     class CSetIntersectionTest : public ITest
     {
-	std::unique_ptr< ExactRefinementTree > mpRtree;
-	LargestSideRefiner mRefiner;
-	STATEFUL_TEST( CSetIntersectionTest );
+    	std::unique_ptr< ExactRefinementTree > mpRtree;
+    	LargestSideRefiner mRefiner;
+    	STATEFUL_TEST( CSetIntersectionTest );
     };
     
     // test whether non-leafs are absent from graph
-    class NonLeafRemovalTest : public ITest
+    class RefinedNodesRemovalTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	LargestSideRefiner mRefiner;
-	STATEFUL_TEST( NonLeafRemovalTest );
+	STATEFUL_TEST( RefinedNodesRemovalTest );
 	
     };
 

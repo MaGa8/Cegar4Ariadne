@@ -88,24 +88,24 @@ class RefinementTree
 	, mDynamics( dynamics )
 	, mEffort( effort )
 	, mNodeIdCounter( 0 )
+	, mInitialEnclosure( upper2ExactBox( safeSet.bounding_box() ) )
 	  // \todo rename make leaf to addState
     {
 	// set up root
-	NodeT initialNode = addState( upper2ExactBox( safeSet.bounding_box() ) );
-	const InteriorTreeValue< EnclosureT >& otv = nodeValue( initialNode ).value(); // should never fail
+	NodeT initialNode = addState( mInitialEnclosure );
 
 	// add outside node
-	auto iAddedOutside = graph::addVertex( mMappings, typename MappingT::ValueT( new OutsideGraphValue() ) );
-	if( iAddedOutside == graph::vertices( mMappings ).second )
+	auto iAddedOutside = graph::addVertex( mMapping, typename MappingT::ValueT( new OutsideGraphValue() ) );
+	if( iAddedOutside == graph::vertices( mMapping ).second )
 	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
 	mOutsideNode = *iAddedOutside;
 
 	// self loop root -> root
-	if( possibly( isReachable( otv, initialNode ) ) )
-	    addEdge( mMappings, initialNode, initialNode );
+	if( possibly( isReachable( initialNode, initialNode ) ) )
+	    addEdge( mMapping, initialNode, initialNode );
 	// transition to unsafe: only can transition to unsafe, not from it
-	if( possibly( isReachable( otv, mOutsideNode ) ) )
-	    addEdge( mMappings, initialNode, mOutsideNode );
+	if( possibly( isReachable( initialNode, mOutsideNode ) ) )
+	    addEdge( mMapping, initialNode, mOutsideNode );
     }
 
     //! \return constraints determining the safe set
@@ -124,15 +124,15 @@ class RefinementTree
     //! \return graph storing reachability between leaves
     const MappingT& graph() const
     {
-	return mMappings;
+	return mMapping;
     }
 
     //! \return tree value stored at node v, storing the box and safety
     std::optional< std::reference_wrapper< const InsideGraphValue< EnclosureT > > > nodeValue( const NodeT& v ) const
     {
-	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
+	const typename MappingT::ValueT& gval = graph::value( mMapping, v );
 	if( gval->isInside() )
-	    return std::make_optional( std::ref( static_cast< InsideGraphValue< typename RefinementT::NodeT >& >( *gval ) ) );
+	    return std::make_optional( std::ref( static_cast< const InsideGraphValue< E >& >( *gval ) ) );
 	else
 	    return std::nullopt;
     }
@@ -150,7 +150,7 @@ class RefinementTree
     //! \return the always unsafe node used
     const NodeT& outside() const { return mOutsideNode; }
 
-    const EnclosureT& initialEnclosure() const { return tree::value( tree(), tree::root( tree() ) )->getEnclosure(); }
+    const EnclosureT& initialEnclosure() const { return mInitialEnclosure; }
 
     //! \param from abstraction for which to find image in leaves of tree; needs to be of type that can be intersected with EnclosureT
     //! \return most refined boxes intersecting with from, including outside node
@@ -160,11 +160,11 @@ class RefinementTree
 	std::vector< NodeT > inters;
 	auto vrange = graph::vertices( graph() );
 	std::copy_if( vrange.first, vrange.second, std::back_inserter( inters ),
-		      [] (auto& gn) {
+		      [this, &from] (auto& gn) {
 			  auto gnval = nodeValue( gn );
 			  if( gnval )
-			      return possibly( !intersection( from, gnval.value().get().getEnclosure() ).is_empty() );
-			  return possibly( !(intersection( from, initialEnclosure() ) == from) );
+			      return possibly( !Ariadne::intersection( from, gnval.value().get().getEnclosure() ).is_empty() );
+			  return possibly( !(Ariadne::intersection( from, initialEnclosure() ) == from) );
 		      } );
 
 	return inters;
@@ -172,32 +172,31 @@ class RefinementTree
 
     //! \brief generalization of other intersection overloads
     //! \param pred function overapproximating whether enclosure and space intersect
-    template< typename ConstraintSetT >
-    std::vector< NodeT > intersection( const ConstraintSetT& s
-				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const ConstraintSetT& ) >& pred ) const
+    std::vector< NodeT > intersection( const Ariadne::BoundedConstraintSet& s
+				       , const std::function< Ariadne::ValidatedUpperKleenean( const EnclosureT&, const Ariadne::BoundedConstraintSet& ) >& pred ) const
     {
+	double largeM = 100 * initialEnclosure().radius().get_d();
+	
 	std::vector< NodeT > inters;
 	auto vrange = graph::vertices( graph() );
 	std::copy_if( vrange.first, vrange.second, std::back_inserter( inters )
-		      , [this, &s] (auto& gn) {
-			    return overlapsConstraints( s, gn ); } );
+		      , [this, &s, &largeM] (auto& gn) {
+			    return possibly( overlapsConstraints( s, gn, largeM ) ); } );
 	return inters;
-	
-	// std::vector< NodeT > abs = intersectionRecursive( subRoot, s, pred );
-	// // relates is applied to outside node, so dummy is never called
-	// if( possibly( overlapsConstraints( s, outside() ) ) )
-	//     abs.push_back( outside() );
-	// return abs;
     }
 
     //! \return all leaves in refinement tree mapping to from
-    std::vector< NodeT > preimage( const NodeT& from ) const
+    std::vector< NodeT > preimage( const NodeT& to ) const
     {
 	std::vector< NodeT > preimg;
-	typename graph::DiGraphTraits< MappingT >::InRangeT ins = graph::inEdges( mMappings, from );
-	for( ; ins.first != ins.second; ++ins.first )
-	    preimg.push_back( graph::source( mMappings, *ins.first ) );
+	typename graph::DiGraphTraits< MappingT >::InRangeT ins = graph::inEdges( mMapping, to );
 
+	for( ; ins.first != ins.second; ++ins.first )
+	{
+	    const typename MappingT::EdgeT edge = *ins.first;
+	    auto edgeSource = graph::source( mMapping, edge );
+	    preimg.push_back( graph::source( mMapping, *ins.first ) );
+	}
 	return preimg;
     }
 
@@ -205,9 +204,9 @@ class RefinementTree
     std::vector< NodeT > postimage( const NodeT& from ) const 
     {
 	std::vector< NodeT > postimg;
-	typename graph::DiGraphTraits< MappingT >::OutRangeT outs = graph::outEdges( mMappings, from );
+	typename graph::DiGraphTraits< MappingT >::OutRangeT outs = graph::outEdges( mMapping, from );
 	for( ; outs.first != outs.second; ++outs.first )
-	    postimg.push_back( graph::target( mMappings, *outs.first ) );
+	    postimg.push_back( graph::target( mMapping, *outs.first ) );
 	return postimg;
     }
 
@@ -222,22 +221,12 @@ class RefinementTree
 	    return false;
     }
     
-    //! \return true if trg is deemed reachable from srcVal
-    //! \note if always unsafe node is passed as second argument, it is reachable iff srcVal maps outside the initial abstraction
-    // \todo eventually parametrize this
-    // \todo does this always return a validated Kleenean? test with effective boxes at some point
-    // \todo remove this one eventually
-    Ariadne::ValidatedUpperKleenean isReachable( const InteriorTreeValue< EnclosureT >& srcVal, const NodeT& trg ) const
-    {
-	return isReachable( srcVal.getEnclosure(), trg );
-    }
-    
     //! \return true if there exists some point in src s.t. there exists a point in trg that can be reached
     //! \todo prepare for generalization of boxes
     Ariadne::ValidatedUpperKleenean isReachable( const EnclosureT& src, const NodeT& trg ) const
     {
 	Ariadne::UpperBoxType ubMapped =  Ariadne::image( src, mDynamics );
-	std::optional< std::reference_wrapper< const InteriorTreeValue< EnclosureT > > > trgVal = nodeValue( trg );
+	std::optional< std::reference_wrapper< const InsideGraphValue< EnclosureT > > > trgVal = nodeValue( trg );
 	if( trgVal )
 	{
 	    auto mapIntersection = Ariadne::intersection( ubMapped, trgVal.value().get().getEnclosure() );
@@ -278,32 +267,37 @@ class RefinementTree
 	    return !(Ariadne::intersection( initialEnclosure(), otherEnclosure ) == otherEnclosure );
     }
 
+    //! \note: don't use this method! breaks in case n == outsideNode()
     //! \return true if n overlaps with constraint
-    template< typename ConstraintSetT >
-    Ariadne::ValidatedUpperKleenean overlapsConstraints( const ConstraintSetT& constraintSet, const NodeT& n, const double& eps ) const
+    Ariadne::ValidatedUpperKleenean overlapsConstraints( const Ariadne::BoundedConstraintSet& constraintSet, const NodeT& n, const double& m ) const
     {
     	auto nval = nodeValue( n );
     	if( nval )
     	    return !(constraintSet.separated( nval.value().get().getEnclosure() ).check( mEffort ) );
     	else
     	{
-	    // c2 = intersection( overapprox of initialEnclosure, constraintSet) )
-	    // if intersection( initialEnclosure, c2 ) != c2 then intersects
-	    auto largerArr = std::transform( initialAbs.array().begin(), initialAbs.array().end()
-					     [&eps] (auto& inter) {
-						 return EnclosureT::IntervalType( inter.lower() - eps, inter.upper() + eps ); } );
-	    Ariadne::BoundedConstraintSet locBoundedCSet( largerArr, constraintSet.constraints() )
-		, initialEncSet( initialEnclosure() );
-	    // comparing upper box and exact box yields validated kleenean, so possibly ! ok
-	    return !(intersection( locBoundedCSet, initialEncSet ).bounding_box() == initialAbs);
+	    // safe set determines initial enclosure
+	    return !( constraints().covers( upper2ExactBox( constraintSet.bounding_box() ) ).check( effort() ) );
 	    
-	    // overcomplicated? not quite right?
-    	    // if( std::all_of( constraintSet.constraints().begin(), constraintSet.constraints().end()                    
-    	    // 		     , [&initialAbs] (auto& c) {
-	    // 			 Ariadne::List< Ariadne::EffectiveConstraint > single = {c};
-	    // 			 return definitely( Ariadne::ConstraintSet( single ).covers( initialAbs ) ); } ) )
-    	    // 	return Ariadne::ValidatedUpperKleenean( false );
-    	    // return Ariadne::ValidatedUpperKleenean( true );
+	    // attempted generalized solution
+	    // EnclosureT initial = initialEnclosure();
+	    // size_t ndim = initial.dimension();
+	    // // construct complement( initialEnclosure ) set
+	    // Ariadne::List< Ariadne::EffectiveConstraint > complementConstraints;
+	    // for( uint i = 0; i < ndim; ++i )
+	    // {
+	    // 	Ariadne::EffectiveScalarFunction xi = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( ndim ), i );
+	    // 	Ariadne::Real l( initial[ i ].lower().get_d() )
+	    // 	    , u( initial[ i ].upper().get_d() );          // is there a better way?
+
+	    // 	complementConstraints.append( xi >= l );
+	    // 	complementConstraints.append( xi <= u );
+	    // }
+	    // Ariadne::RealBox pseudoUniverse = { {-m, m}, {-m, m} };
+	    // Ariadne::BoundedConstraintSet initialComplement( pseudoUniverse, complementConstraints )
+	    // 	, universe( pseudoUniverse, Ariadne::List< Ariadne::EffectiveConstraint >() );
+	    // if constraintSet intersection initialComplement overlaps, then constraintSet overlaps outside
+	    // return Ariadne::overlap( Ariadne::intersection( initialComplement, constraintSet ), universe );
     	}
     }
     
@@ -323,32 +317,29 @@ class RefinementTree
       \brief refines node v using r and updates
     */
     template< typename R >
-    void refine( const NodeT& v, R& r )
+    void refine( NodeT v, R& r ) // may not reference v, because modification of mMapping may cause reallocation of vertex container
     {
-	const typename MappingT::ValueT& gval = graph::value( mMappings, v );
-	// interior node cannot be refined -> do nothing
-	if( !gval->isInside() )
+	auto vval = nodeValue( v );
+	if( !vval )
 	    return;
-	
-	InsideGraphValue< EnclosureT >& insNode = static_cast< InsideGraphValue< typename RefinementT::NodeT >& >( *gval );
-    	EnclosureT obox = insNode.getEnclosure();
+
 	// make new tree values
-    	std::vector< EnclosureT > refinedEnclosures = r( obox );
+    	std::vector< EnclosureT > refinedEnclosures = r( vval.value().get().getEnclosure() );
+	std::vector< NodeT > refinedStates; refinedStates.reserve( refinedEnclosures.size() );
 	// map to outside node directly
 	for( auto& refEnc : refinedEnclosures )
-	{
-	    auto NodeT& refined = addState( refEnc );
-	    refineEdges( v, refined );
-	}
+	    refinedStates.push_back( addState( refEnc ) );
+
+	refineEdges( v, refinedStates.begin(), refinedStates.end() );
     	
 	// unlink v from the graph after its connectivity is no longer needed
-	graph::removeVertex( mMappings, v );
+	graph::removeVertex( mMapping, v );
     }
 
   private:
 
     //! \return pointer to newly allocated leaf value ensuring that the safety flag is correctly initialized
-    NodeT& addState( const EnclosureT& enc )
+    const NodeT& addState( const EnclosureT& enc )
     {
 	Ariadne::ValidatedKleenean safety = definitely( constraints().covers( enc ).check( mEffort ) )
 	    ? Ariadne::ValidatedKleenean( true )
@@ -356,42 +347,48 @@ class RefinementTree
 	       ? Ariadne::ValidatedKleenean( false )
 	       : Ariadne::indeterminate);
 	auto pvalue = std::shared_ptr< IGraphValue >( new InsideGraphValue< EnclosureT >( mNodeIdCounter++, enc, safety  ) );
-	auto iadded = mMappings.addVertex( pvalue );
+	auto iadded = graph::addVertex( mMapping, pvalue );
 	return *iadded;
     }
 
     //! \note adapts edges of parent node after refinement
     template< typename IterT >
-    void refineEdges( const NodeT& parent, const IterT& beginChildren, const IterT& endChilren )
+    void refineEdges( const NodeT& parent, const IterT& beginChildren, const IterT& endChildren )
     {
 	// add edges
 	std::vector< NodeT > pres( preimage( parent ) );
-	pres.erase( std::find_if( pres.begin(), pres.end(), std::bind( &equal, *this, parent, std::placeholders::_1 ) ) );
+	auto iParentInPres = std::find_if( pres.begin(), pres.end()
+					   , std::bind( &RefinementTree< E >::equal, &*this, parent, std::placeholders::_1 ) );
+	if( iParentInPres != pres.end() )
+	    pres.erase( iParentInPres );
 	
 	std::vector< NodeT > posts( postimage( parent ) );
-	pres.erase( std::find_if( posts.begin(), posts.end(), std::bind( &equal, *this, parent, std::placeholders::_1 ) ) );
-	
+	auto iParentInPosts = std::find_if( posts.begin(), posts.end()
+					    , std::bind( &RefinementTree< E >::equal, &*this, parent, std::placeholders::_1 ) );
+	if( iParentInPosts != posts.end() )
+	    posts.erase( iParentInPosts );
+
 	for( auto ichild = beginChildren; ichild != endChildren; ++ichild )
 	{
 	    // connect parent's preimage minus self-loop
 	    for( auto& pre : pres )
 	    {
 		if( possibly( isReachable( pre, *ichild ) ) )
-		    graph::addEdge( pre, *ichild );
+		    graph::addEdge( mMapping, pre, *ichild );
 	    }
 	    // connect parent's post image minus self-loop
 	    for( auto& post : posts )
 	    {
 		if( possibly( isReachable( *ichild, post ) ) )
-		    graph::addEdge( *ichild, post );
+		    graph::addEdge( mMapping, *ichild, post );
 	    }
 	    // connect all children from-to and to-from
 	    for( auto iChildUp = ichild; iChildUp != endChildren; ++iChildUp )
 	    {
 		if( possibly( isReachable( *ichild, *iChildUp ) ) )
-		    graph::addEdge( *ichild, *iChildUp );
+		    graph::addEdge( mMapping, *ichild, *iChildUp );
 		if( ichild != iChildUp && possibly( isReachable( *iChildUp, *ichild ) ) ) // don't make a 2nd self-loop
-		    graph::addEdge( *iChildUp, *iChild );
+		    graph::addEdge( mMapping, *iChildUp, *ichild );
 	    }
 	}
     }
@@ -400,9 +397,10 @@ class RefinementTree
     Ariadne::EffectiveVectorFunction mDynamics;
     Ariadne::Effort mEffort;
     unsigned long mNodeIdCounter;
-    RefinementT mRefinements;
-    MappingT mMappings;
+    MappingT mMapping;
+    E mInitialEnclosure;
     NodeT mOutsideNode;
 };
 
 #endif
+

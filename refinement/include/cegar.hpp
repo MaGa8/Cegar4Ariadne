@@ -158,7 +158,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 	return true;
     
     //map forward
-    const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
+    const typename Rtree::EnclosureT& rtEnc = rtree.initialEnclosure();
     for( PathIterT nextCounter = beginCounter + 1; nextCounter != endCounter; beginCounter = nextCounter++ )
     {
 	auto oNext = rtree.nodeValue( *nextCounter );

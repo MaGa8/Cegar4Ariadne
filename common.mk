@@ -120,3 +120,10 @@ clean:
 	$(foreach mod,$(MODULES),echo $(PWD) && cd $(mod) && make clean && cd $(PWD) &&) echo "cleaned"
 
 -include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(LOCAL_SOURCES))))
+
+.PHONY: test
+test:
+	@echo "local sources " $(LOCAL_SOURCES)
+	@echo "global sources " $(GLOBAL_SOURCES)
+	@echo "cxx flags " $(CXXFLAGS)
+	@echo "lib flags " $(LDFLAGS) $(LDLIBS)
