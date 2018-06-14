@@ -13,9 +13,9 @@
 
 #include <assert.h>
 
-#define ADJ_GRAPH_TEMPLATE template< typename T,    template< typename K, typename V > class VCT,    template< typename S > class OECT,    template< typename S > class IECT >
+#define ADJ_GRAPH_TEMPLATE template< typename T,    template< typename K, typename V, typename CompT > class VCT,    template< typename S > class OECT,    template< typename S > class IECT,     typename ComparatorT >
 
-#define AGRAPH AdjacencyDiGraph< T, VCT, OECT, IECT >
+#define AGRAPH AdjacencyDiGraph< T, VCT, OECT, IECT, ComparatorT >
 
 namespace graph
 {
@@ -47,7 +47,7 @@ namespace graph
     };
 
     //! \class vector map: simpler replacement for vertex map
-    template< typename K, typename V  >
+    template< typename K, typename V, typename ComparatorT >
     class VecMap : public std::vector< std::pair< K, V > >
     {
       public:
@@ -72,17 +72,21 @@ namespace graph
 	    const mapped_type* operator ->() { return &(BaseT::const_iterator->second); } // hope this is not a bug due to temp address
 	};
 
-	VecMap() {}
+	VecMap( const ComparatorT& comp )
+	    : mComp( comp )
+	{}
 	
 	VecMap( typename BaseT::const_iterator start
-		, typename BaseT::const_iterator end )
+		, typename BaseT::const_iterator end
+		, const ComparatorT& comp = ComparatorT() )
 	    : BaseT( start, end )
+	    , mComp( comp )
 	{}
 
 	ValueIterator find( const K& key ) const
 	{
 	    return ValueIterator( std::find_if( BaseT::begin(), BaseT::end()
-						, [&key] (const std::pair< key_type, mapped_type >& kv ) { return kv.first == key; } ) );
+						, [&] (const std::pair< key_type, mapped_type >& kv ) { return mComp( kv.first, key ); } ) );
 	}
 	
 	ValueIterator insert( const K& key, const V& val )
@@ -95,6 +99,8 @@ namespace graph
 	{
 	    return ValueIterator( BaseT::erase( this->find( key ) ) );
 	}
+      private:
+	ComparatorT mComp;
     };
 
     /*!
@@ -108,9 +114,10 @@ namespace graph
       \note should be Container::iterator insert( const T& x ) and erase( Container::iterator i )
     */
     template< typename T
-	      , template< typename K, typename V > class VCT
+	      , template< typename K, typename V, typename CompT > class VCT
 	      , template< typename S > class OECT
-	      , template< typename S > class IECT >
+	      , template< typename S > class IECT
+	      , typename ComparatorT = std::equal_to< T > >
     class AdjacencyDiGraph
     {
       private:
@@ -124,7 +131,7 @@ namespace graph
 	// struct ConstIteratorAdapterTemplate;
 
 	// things
-	typedef AdjacencyDiGraph< T, VCT, OECT, IECT > Agraph;
+	typedef AdjacencyDiGraph< T, VCT, OECT, IECT, ComparatorT > Agraph;
 	// typedef ConstT ConstValueT;
 	typedef T ValueT;
 	// typedef ConstNode ConstVertexT;
@@ -133,7 +140,7 @@ namespace graph
 	typedef Edge EdgeT;
 
 	// containers
-	typedef VCT< T, Node > VertexContainerT;
+	typedef VCT< T, Node, ComparatorT > VertexContainerT;
 	typedef OECT< EdgeT > OutEdgeContainerT;
 	typedef IECT< EdgeT > InEdgeContainerT;
 
@@ -169,7 +176,7 @@ namespace graph
 
 	class Node
 	{
-	    friend class AdjacencyDiGraph< T, VCT, OECT, IECT >;
+	    friend class AdjacencyDiGraph< T, VCT, OECT, IECT, ComparatorT >;
 	  public:
 	    Node() = default;
 
@@ -186,7 +193,7 @@ namespace graph
 
 	class Edge
 	{
-	    friend class AdjacencyDiGraph< T, VCT, OECT, IECT >;
+	    friend class AdjacencyDiGraph< T, VCT, OECT, IECT, ComparatorT >;
 	  public:
 	    Edge() = default;
 	    
@@ -216,6 +223,11 @@ namespace graph
 	//     Edge& operator =( const Edge& orig ) { ConstEdge::operator =( orig ); }
 	// };
 
+	AdjacencyDiGraph( const ComparatorT& cmp = ComparatorT() )
+	    : mVertices( cmp )
+	    , mComp( cmp )
+	{}
+	
 	//unpacking methods: const stuff is done by casting in interface functions
 	const ValueT& value( const VertexT& v ) const
 	{
@@ -271,7 +283,7 @@ namespace graph
 	{
 	    VIterT ivAdd = mVertices.find( v );
 	    if( ivAdd == mVertices.cend() )
-		ivAdd = mVertices.insert( v, VertexT( std::shared_ptr< InternalNode >( new InternalNode( v ) ) ) );
+		ivAdd = mVertices.insert( v, VertexT( std::shared_ptr< InternalNode >( new InternalNode( v, mComp ) ) ) );
 	    return ivAdd; 
 	}
 
@@ -348,22 +360,28 @@ namespace graph
 	// store node
 	struct InternalNode
 	{
-	    InternalNode() = default;
+	    InternalNode( const ComparatorT& cmp)
+		: mCmp( cmp )
+	    {}
 
-	    InternalNode( const ValueT& v ) : mValue( v ) {}
+	    InternalNode( const ValueT& v, const ComparatorT& cmp )
+		: mValue( v )
+		, mCmp( cmp ) {}
 	    
 	    InternalNode( const InternalNode& v )
 		: mIns( v.mIns.begin(), v.mIns.end() )
 		, mOuts( v.mOuts.begin(), v.mOuts.end() )
+		, mCmp( v.mCmp )
 	    {}
 
 	    InternalNode& operator =( const InternalNode& v ) = delete;
 
-	    bool operator ==( const InternalNode& v ) { return this->mValue == v.mValue; }
+	    bool operator ==( const InternalNode& v ) { return mCmp( this->mValue, v.mValue ); }
 
 	    ValueT mValue;
 	    InEdgeContainerT mIns;
 	    OutEdgeContainerT mOuts;
+	    const ComparatorT& mCmp;
 	};
 
 	/* template for wrappers around Bidirectional iterators WrapIterT
@@ -409,6 +427,7 @@ namespace graph
 	// };
 	
 	VertexContainerT mVertices;
+	ComparatorT mComp;
     };
 
     // how to handle changing values when using e.g. set as underlying container type
@@ -460,9 +479,10 @@ namespace graph
     std::pair< typename AGRAPH::OutIterT, typename AGRAPH::InIterT > removeEdge( AGRAPH& ag, const typename AGRAPH::VertexT& src, const typename AGRAPH::VertexT& trg ) { return ag.removeEdge( src, trg ); }
 
     template< typename T
-	      , template< typename K, typename V > typename VCT
+	      , template< typename K, typename V, typename CmpT > typename VCT
 	      , template< typename S > typename OECT
 	      , template< typename S > typename IECT
+	      , typename ComparatorT
 	      , typename CharT, typename Traits
 	      , typename P>
     std::basic_ostream< CharT, Traits >& print( std::basic_ostream< CharT, Traits >& os, const AGRAPH& ag, const typename AGRAPH::VertexT& v
@@ -498,9 +518,10 @@ namespace graph
     }
 
     template< typename T
-	      , template< typename K, typename V > typename VCT
+	      , template< typename K, typename V, typename CmpT > typename VCT
 	      , template< typename S > typename OECT
 	      , template< typename S > typename IECT
+	      , typename ComparatorT
 	      , typename CharT, typename Traits
 	      , typename P>
     std::basic_ostream< CharT, Traits >& print( std::basic_ostream< CharT, Traits >& os, const AGRAPH& ag
@@ -518,9 +539,10 @@ namespace graph
 
     // somehow this function causes a segfault
     template< typename T
-	      , template< typename K, typename V > typename VCT
+	      , template< typename K, typename V, typename CmpT > typename VCT
 	      , template< typename S > typename OECT
 	      , template< typename S > typename IECT
+	      , typename ComparatorT
 	      , typename CharT, typename Traits >
     std::basic_ostream< CharT, Traits >& operator <<( std::basic_ostream< CharT, Traits >& os, const AGRAPH& ag )
     {
