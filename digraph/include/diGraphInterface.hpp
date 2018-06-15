@@ -47,6 +47,15 @@ namespace graph
     template< typename G >
     const typename DiGraphTraits< G >::ValueT& value( const G& g, const typename DiGraphTraits< G >::VertexT& v );
 
+    /*! 
+      \brief extracts v from underlying associative container, calls call on it and inserts it back in
+      \param call can be called as call( DiGraphTraits< G >::ValueT& )
+      \return vertex iterator to updated vertex
+      \note this operation invalidates any vertex iterator to v
+    */
+    template< typename G, typename CallT >
+    typename DiGraphTraits< G >::VIterT updateVertex( G& g, const typename DiGraphTraits< G >::VertexT& v, CallT& call );
+
     template< typename G >
     typename DiGraphTraits< G >::VertexT source( const G& g, typename DiGraphTraits< G >::EdgeT& e );
 

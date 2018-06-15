@@ -15,6 +15,8 @@
 
 #define ADJ_GRAPH_TEMPLATE template< typename T,    template< typename K, typename V, typename CompT > class VCT,    template< typename S > class OECT,    template< typename S > class IECT,     typename ComparatorT >
 
+#define ADJ_GRAPH_TEMPLATE_PARAMS typename T,    template< typename K, typename V, typename CompT > class VCT,    template< typename S > class OECT,    template< typename S > class IECT,     typename ComparatorT
+
 #define AGRAPH AdjacencyDiGraph< T, VCT, OECT, IECT, ComparatorT >
 
 namespace graph
@@ -318,6 +320,19 @@ namespace graph
 	    return mVertices.erase( vval );
 	}
 
+	template< typename CallT >
+	VIterT updateVertex( const VertexT& v, CallT& call )
+	{
+	    const VIterT iv = findVertex( v );
+	    if( iv == mVertices.end() )
+		throw std::logic_error( "cannot update vertex, does not reference value stored in graph" );
+	    
+	    std::shared_ptr< InternalNode > pGraphNode = iv->second->mPtr; // keep copy of ptr, so never deallocate
+	    mVertices.erase( iv );
+	    call( pGraphNode->mValue );
+	    return mVertices.insert( pGraphNode->mValue, VertexT( pGraphNode ) );
+	}
+
 	std::pair< OutIterT, InIterT > addEdge( const VertexT& src, const VertexT& trg )
 	{
 	    const EdgeT newEdge( src, trg ) ;
@@ -436,6 +451,9 @@ namespace graph
     ADJ_GRAPH_TEMPLATE
     const typename AGRAPH::ValueT& value( const AGRAPH& ag, const typename AGRAPH::VertexT& v ) { return ag.value( v ); }
 
+    template< ADJ_GRAPH_TEMPLATE_PARAMS, typename CallT >
+    typename AGRAPH::VIterT updateVertex( AGRAPH& ag, const typename AGRAPH::VertexT& v, CallT& call ) { return ag.updateVertex( v, call ); }
+    
     ADJ_GRAPH_TEMPLATE
     const typename AGRAPH::VertexT& source( const AGRAPH& ag, const typename AGRAPH::EdgeT& e ) { return ag.source( e ); }
 
