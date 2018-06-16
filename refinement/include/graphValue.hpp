@@ -19,6 +19,7 @@ class InsideGraphValue : public IGraphValue
 	: mId( id )
 	, mEnclosure( e )
 	, mSafe( safe )
+	, mTransSafe( Ariadne::indeterminate )
     {}
 
     InsideGraphValue( const InsideGraphValue& orig ) = default;
@@ -36,15 +37,38 @@ class InsideGraphValue : public IGraphValue
     //! \return true if the box stored is completely covered by all constraints, indeterminate if it lies within the initial abstraction but is not covered completely by all constraints and false if it lies outside of the initial abstraction
     Ariadne::ValidatedKleenean isSafe() const { return mSafe; }
 
+    //1 \return true if no unsafe state can be reached, false if unsafe state can be reached, indeterminate if not set
+    Ariadne::ValidatedKleenean isTransSafe() const { return mTransSafe; }
+
     bool operator ==( const InsideGraphValue< EnclosureT >& tv ) const
     {
 	return this->mId == tv.mId;
+    }
+
+    void resetTransSafe()
+    {
+	mTransSafe = Ariadne::indeterminate;
+    }
+
+    void transSafe()
+    {
+	// if( definitely( mTransSafe ) )
+	    // throw std::logic_error( "attempt to set node safe, even though node is already set safe" );
+	mTransSafe = true;
+    }
+
+    void transUnsafe()
+    {
+	if( definitely( mTransSafe ) )
+	    throw std::logic_error( "attempt to set node unsafe, even though node is already set safe" );
+	mTransSafe = false;
     }
 
   private:
     unsigned long mId;
     EnclosureT mEnclosure;
     Ariadne::ValidatedKleenean mSafe;
+    Ariadne::ValidatedKleenean mTransSafe;
 };
 
 //! \class value to store in graph of region outside first initial abstractio
@@ -53,10 +77,15 @@ struct OutsideGraphValue : public IGraphValue
     bool isInside() const { return false; }
 };
 
-template< typename CharT, typename TraitsT, typename E >
+template< typename E, typename CharT, typename TraitsT >
 std::basic_ostream< CharT, TraitsT >& operator <<( std::basic_ostream< CharT, TraitsT >& os, const InsideGraphValue< E >& val )
 {
-    return os << val.id() << ": " << val.getEnclosure() << " (" << val.isSafe() << ") ";
+    os << val.id() << ": ";
+    os << val.getEnclosure() << " (";
+    os << val.isSafe() << ", ";
+    os << val.isTransSafe() << ") ";
+    return os;
+    // return os << val.id() << ": " << val.getEnclosure() << " (" << val.isSafe() << ", " << val.isTransSafe() << ") ";
 }
 
 template< typename CharT, typename TraitsT >
