@@ -212,14 +212,14 @@ void RefinementTreeTest::RefinedNodesRemovalTest::init()
 {
     D( std::cout << "refined nodes removal test init" << std::endl; );
     Ariadne::ExactBoxType safeBox( { {0,10}, {0,9} } );
-    mpRtree.reset( new ExactRefinementTree( getDefaultTree( safeBox, 10 ) ) );
+    mpRtree.reset( staticMap( safeBox, Ariadne::Effort( 10 ) ) );
     iterate();
 }
 
 void RefinementTreeTest::RefinedNodesRemovalTest::iterate()
 {
     D( std::cout << "non leaf removal test iterate" << std::endl; );
-    typename ExactRefinementTree::NodeT refined = refineRandomLeaf( *mpRtree, mRefiner );
+    refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 bool RefinementTreeTest::RefinedNodesRemovalTest::check() const
@@ -270,9 +270,7 @@ void RefinementTreeTest::PreimageTest::init()
 void RefinementTreeTest::PreimageTest::iterate()
 {
     D( std::cout << "preimage test iterate" << std::endl; );
-
-    GraphVertexPrintConverter conv( *mpRtree );
-    mRefined = refineRandomLeaf( *mpRtree, mRefiner );
+    refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 // check for each child of refined node r':
@@ -326,7 +324,7 @@ void RefinementTreeTest::PostimageTest::init()
 void RefinementTreeTest::PostimageTest::iterate()
 {
     D( std::cout << "preimage test iterate" << std::endl; );
-    mRefined = refineRandomLeaf( *mpRtree, mRefiner );
+    refineRandomLeaf( *mpRtree, mRefiner );
 }
 
 // check for each child of refined node r':
@@ -384,12 +382,11 @@ void RefinementTreeTest::AlwaysUnsafeTest::iterate()
 // some leaf node exists that maps to always unsafe, because the system is static and unsafe by construction
 bool RefinementTreeTest::AlwaysUnsafeTest::check() const
 {
-    std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > gvalCon = GraphVertexPrintConverter( *mpRtree );
     auto unsafePreimg = mpRtree->preimage( mpRtree->outside() );
     if( unsafePreimg.empty() )
     {
 	std::cout << "failure! always unsafe is not being mapped to" << std::endl;
-	graph::print( std::cout, mpRtree->graph(), gvalCon );
+	// graph::print( std::cout, mpRtree->graph(), gvalCon ); adapt to new printing method
 
 	return false;
     }
@@ -412,6 +409,63 @@ bool RefinementTreeTest::AlwaysUnsafeTest::check() const
     return true;
 }
 
+RefinementTreeTest::TEST_CTOR( TransitiveSafetyTest, "transitive safety correct" )
+
+bool RefinementTreeTest::TransitiveSafetyTest::reachUnsafe( const typename ExactRefinementTree::NodeT& n, NodeSet& visited ) const
+{
+    if( possibly( !mpRtree->isSafe( n ) ) )
+	return true;
+
+    visited.insert( n );
+
+    for( auto& ns : mpRtree->postimage( n ) )
+    {
+	if( visited.find( ns ) == visited.end() && reachUnsafe( ns, visited ) )
+	    return true;
+    }
+
+    return false;
+}
+
+void RefinementTreeTest::TransitiveSafetyTest::init()
+{
+    // mpRtree.reset( henonMap( Ariadne::ExactBoxType( { {-3, 3}, {-3, 3} } ), 1.4, 0.3, Ariadne::Effort( 10 ) ) );
+    // mpRtree.reset( staticMap( Ariadne::ExactBoxType( { {-1, 1}, {-2, 1} } ), Ariadne::Effort( 10 ) ) );
+    mpRtree.reset( squareMap( Ariadne::ExactBoxType( { {-1.5, 1.5}, {-1, 1} } ), Ariadne::Effort( 10 ) ) );
+    mRefined.clear();
+}
+
+void RefinementTreeTest::TransitiveSafetyTest::iterate()
+{
+    auto refd = refineRandomLeaf( *mpRtree, mRefiner );
+    mRefined = std::vector< typename ExactRefinementTree::NodeT >( refd.begin(), refd.end() );
+}
+
+bool RefinementTreeTest::TransitiveSafetyTest::check() const
+{
+    for( auto in = graph::vertices( mpRtree->graph() ); in.first != in.second; ++in.first )
+    {
+	Ariadne::ValidatedKleenean tsafe = mpRtree->isTransSafe( *in.first );
+	if( !definitely( tsafe ) && !definitely( !tsafe ) )
+	{
+	    print( std::cout, mpRtree->graph(), GraphPrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
+	    std::cout << mpRtree->nodeValue( *in.first ).value().get() << " is indeterminate " << std::endl;
+	    return false;
+	}
+	NodeSet ns( *mpRtree );
+	bool reachesUnsafe = reachUnsafe( *in.first, ns );
+	if( reachesUnsafe != definitely( !tsafe ) )
+	{
+	    print( std::cout, mpRtree->graph(), GraphPrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
+	    
+	    std::cout << "ERROR at " << mpRtree->nodeValue( *in.first ).value().get() << std::endl;
+	    std::cout << "find reachable unsafe node " << reachesUnsafe << " but tsafety " << tsafe << std::endl;
+	    return false;
+	}
+    }
+    return true;
+}
+
 RefinementTreeTest::GROUP_CTOR( RefinementTreeTest, "refinement tree" );
 
 void RefinementTreeTest::init()
@@ -420,11 +474,12 @@ void RefinementTreeTest::init()
     std::shared_ptr< ContinuousRandomRunner > pRcontinuous( new ContinuousRandomRunner() );
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
-    addTest( new SizeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new IntersectionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    addTest( new CSetIntersectionTest( 1*mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    addTest( new RefinedNodesRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new AlwaysUnsafeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );    
+    // addTest( new SizeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new IntersectionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    // addTest( new CSetIntersectionTest( 1*mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    // addTest( new RefinedNodesRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    // addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new AlwaysUnsafeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new TransitiveSafetyTest( 1*mTestSize, mRepetitions ), pRinterleave );
 }

@@ -17,6 +17,8 @@ struct RefinementTreeTest : public ITestGroup
     // typedef RefinementTree< Ariadne::EffectiveIntervalType > EffectiveRefinementTree;
     typedef RefinementTree< Ariadne::Box< Ariadne::ExactIntervalType > > ExactRefinementTree;
 
+    typedef std::set< typename ExactRefinementTree::NodeT, typename ExactRefinementTree::NodeComparator > NodeSet;
+    
     // typedef RefinementTree< int > EffectiveRefinementTree;
     // typedef RefinementTree< int > ExactRefinementTree;
     
@@ -44,7 +46,7 @@ struct RefinementTreeTest : public ITestGroup
     };
 
     template< typename E, typename R >
-    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
+    static std::vector< typename RefinementTree< E >::NodeT > refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
 	auto vrange = graph::vertices( rt.graph() );
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
@@ -57,8 +59,7 @@ struct RefinementTreeTest : public ITestGroup
 	    n = *irefine;
 	} while( rt.equal( rt.outside(), n ) );
 							
-	rt.refine( n, refiner );
-	return n;
+	return rt.refine( n, refiner );
     }
 
     template< typename E >
@@ -73,18 +74,46 @@ struct RefinementTreeTest : public ITestGroup
 	}
     }
 
-    template< typename IntervalT >
-    static RefinementTree< Ariadne::Box< IntervalT > > getDefaultTree( const Ariadne::Box< IntervalT > rootBox, uint cap )
+    template< typename BoxT >
+    static RefinementTree< BoxT >* staticMap( const BoxT safeBox, const Ariadne::Effort& e )
     {
 	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-	Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
 	// static dynamics
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::Space< Ariadne::Real > vspace = {x, y};
 	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-	return RefinementTree< Ariadne::Box< IntervalT > >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( rootBox ) )
-							    , f, Ariadne::Effort( 5 ) );
+	return new RefinementTree< BoxT >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( safeBox ) ), f, e );
+    }
+
+    template< typename BoxT >
+    static RefinementTree< BoxT >* squareMap( const BoxT safeBox, const Ariadne::Effort& e )
+    {
+	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+	// static dynamics
+	Ariadne::RealVariable x( "x" ), y( "y" );
+	Ariadne::Space< Ariadne::Real > vspace = {x, y};
+	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x*x, y*y} );
+	return new RefinementTree< BoxT >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( safeBox ) ), f, e );
+    }
+
+    //! \return refinement tree for henon map with strictly positive initial and safe sets (i.e. left hand bottom corner is origin
+    template< typename BoxType >
+    static RefinementTree< BoxType >* henonMap( const BoxType& safeBox
+						, double a, double b, const Ariadne::Effort& e )
+    {
+	Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+
+	Ariadne::RealBox realSafeBox( safeBox );
+	Ariadne::BoundedConstraintSet safeSet( realSafeBox );
+	
+	Ariadne::RealVariable x( "x" ), y( "y" );
+	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
+	Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - fa*x*x + y, fb*x} );
+
+	return new RefinementTree< BoxType >( safeSet, henon, e );
     }
 
     template< typename E >
@@ -135,7 +164,6 @@ struct RefinementTreeTest : public ITestGroup
     class PreimageTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	typename ExactRefinementTree::NodeT mRefined;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( PreimageTest );
     };
@@ -144,7 +172,6 @@ struct RefinementTreeTest : public ITestGroup
     class PostimageTest : public ITest
     {
     	std::unique_ptr< ExactRefinementTree > mpRtree;
-    	typename ExactRefinementTree::NodeT mRefined;
     	LargestSideRefiner mRefiner;
     	STATEFUL_TEST( PostimageTest );
     };
@@ -156,6 +183,19 @@ struct RefinementTreeTest : public ITestGroup
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( AlwaysUnsafeTest );
     };
+
+    // test that transitive safety is set correctly: true if no unsafe node can be reached, false otherwise
+    class TransitiveSafetyTest : public ITest
+    {
+	std::unique_ptr< ExactRefinementTree > mpRtree;
+	std::vector< typename ExactRefinementTree::NodeT > mRefined;
+	LargestSideRefiner mRefiner;
+	
+	bool reachUnsafe( const typename ExactRefinementTree::NodeT& n, NodeSet& visited ) const;
+	
+	STATEFUL_TEST( TransitiveSafetyTest );
+    };
+    
 
     // move away to cegar test
     // //positve test for finding counterexamples
@@ -170,6 +210,62 @@ struct RefinementTreeTest : public ITestGroup
 
     void init();
 };
+
+template< typename E >
+struct GraphPrinter
+{
+
+    static std::function< GraphPrinter< E >( const typename RefinementTree< E >::MappingT::ValueT& ) >
+    makeFun( bool printId, bool printEnc, bool printLoc, bool printTrans )
+    {
+	return [=] (const typename RefinementTree< E >::MappingT::ValueT& val ) {
+		   return GraphPrinter( *val, printId, printEnc, printLoc, printTrans ); };
+    }
+    
+    GraphPrinter( const IGraphValue& gval, bool printId, bool printEnc, bool printLoc, bool printTrans )
+	: mEnc( Ariadne::Vector< typename E::IntervalType >() )
+	, mPrintEnc( printEnc ), mPrintLoc( printLoc ), mPrintTrans( printTrans ), mPrintId( printId )
+    {
+	if( gval.isInside() )
+	{
+	    const InsideGraphValue< E >& pIn = static_cast< const InsideGraphValue< E > &>( gval );
+	    mEnc = pIn.getEnclosure();
+	    mLocSafety = pIn.isSafe();
+	    mTransSafety = pIn.isTransSafe();
+	    mId = pIn.id();
+	}
+	else
+	{
+	    mLocSafety = false;
+	    mTransSafety = false;
+	    mId = 0;
+	}
+    }
+	
+    E mEnc;
+    Ariadne::ValidatedKleenean mLocSafety, mTransSafety;
+    uint mId;
+    bool mPrintEnc, mPrintLoc, mPrintTrans, mPrintId;
+};
+
+
+
+template< typename E, typename CharT, typename TraitsT >
+std::basic_ostream< CharT, TraitsT >& operator <<( std::basic_ostream< CharT, TraitsT >& os, const GraphPrinter< E >& info )
+{
+    if( info.mPrintId )
+    	os << info.mId << ":  ";
+    if( info.mPrintEnc )
+    	os << info.mEnc << " ";
+    if( info.mPrintLoc )
+    	os << "(" << info.mLocSafety << ") ";
+    if( info.mPrintId )
+    	os << "(" << info.mTransSafety << ")";
+
+    return os;
+}
+    
+
 
 #endif
 

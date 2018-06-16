@@ -2,6 +2,7 @@
 #define REFINEMENT_TREE_HPP
 
 #include "adjacencyDiGraph.hpp"
+#include "depthFirstSearch.hpp"
 #include "refinement.hpp"
 #include "treeValue.hpp"
 #include "graphValue.hpp"
@@ -17,6 +18,9 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+
+template< typename E > class NodeEqual;
+template< typename E > class NodeHash;
 
 /*!
   \class stores iterative refinements in tree and maintains links between leaf nodes
@@ -89,7 +93,6 @@ class RefinementTree
 	, mEffort( effort )
 	, mNodeIdCounter( 0 )
 	, mInitialEnclosure( upper2ExactBox( safeSet.bounding_box() ) )
-	  // \todo rename make leaf to addState
     {
 	// set up root
 	NodeT initialNode = addState( mInitialEnclosure );
@@ -106,6 +109,9 @@ class RefinementTree
 	// transition to unsafe: only can transition to unsafe, not from it
 	if( possibly( isReachable( initialNode, mOutsideNode ) ) )
 	    addEdge( mMapping, initialNode, mOutsideNode );
+
+	std::vector< NodeT > initialSingle = {initialNode};
+	setTransitiveSafety( initialSingle.begin(), initialSingle.end() );
     }
 
     //! \return constraints determining the safe set
@@ -145,6 +151,15 @@ class RefinementTree
 	    return nval.value().get().isSafe();
 	else
 	    return Ariadne::ValidatedKleenean( false );
+    }
+
+
+    Ariadne::ValidatedKleenean isTransSafe( const NodeT& n ) const
+    {
+	auto nval = nodeValue( n );
+	if( nval )
+	    return nval.value().get().isTransSafe();
+	return false;
     }
 
     //! \return the always unsafe node used
@@ -336,6 +351,15 @@ class RefinementTree
     	
 	// unlink v from the graph after its connectivity is no longer needed
 	graph::removeVertex( mMapping, v );
+
+	// compute transitive safety AFTER unlinking parent node
+	setTransitiveSafety( refinedStates.begin(), refinedStates.end() );
+	// for( auto& refS : refinedStates )
+	// {
+	//     setTransitiveSafety( refS );
+	//     // auto refval = nodeValue( refS );
+	//     // std::cout << refval.value().get().getEnclosure() << " is tsafe " << refval.value().get().isTransSafe() << std::endl;
+	// }
 	return refinedStates;
     }
 
@@ -395,6 +419,161 @@ class RefinementTree
 	    }
 	}
     }
+
+    class FindUnsafe : public graph::BidirectionalDFTControl
+    {
+      public:
+	FindUnsafe() : mFound( false ) {}
+
+	template< typename VisitSetT >
+	void visit( const MappingT& g, const NodeT& v, const VisitSetT& visited )
+	{
+	    const std::shared_ptr< IGraphValue >& pvval = graph::value( g, v );
+	    if( !pvval->isInside() || possibly( !static_cast< InsideGraphValue< E >* >( pvval.get() )->isSafe() ) )
+		mFound = true;
+	}
+
+	template< typename VisitSetT >
+	bool terminate( const MappingT& g, const NodeT& v, const VisitSetT& visited ) {return mFound;}
+
+	template< typename VisitSetT >
+	bool isBacktrack( const MappingT& g, const NodeT& v, const VisitSetT& visited ) {return mFound;}
+
+	operator bool() {return mFound;}
+	    
+      private:
+	bool mFound;
+    };
+
+    class Resetter : public graph::BackwardDFTControl
+    {
+      public:
+	std::vector< NodeT > mReset;
+	
+	Resetter( const RefinementTree< E >& rtree )
+	    : mRtree( rtree )
+	{}
+
+	template< typename VisitSetT >
+	bool isBacktrack( const MappingT& g, const NodeT& v, const VisitSetT& visited )
+	{
+	    return possibly( !mRtree.isSafe( v ) )      // local unsafety
+		||
+		possibly( mRtree.isTransSafe( v ) );     // either indeterminate (reset/not set) or true (-> nothing to reset)
+	}
+
+	template< typename VisitSetT >
+	void visit( const MappingT& g, const NodeT& v, const VisitSetT& visited )
+	{
+	    if( definitely( !mRtree.isTransSafe( v ) ) && definitely( mRtree.isSafe( v ) ) ) // trans unsafe and loc safe
+	    {
+		static_cast< InsideGraphValue< E > *>( graph::value( g, v ).get() )->resetTransSafe();
+		mReset.push_back( v );                    // does not re-insert nodes already reset
+	    }
+	}
+
+      private:
+	const RefinementTree< E >& mRtree;
+    };
+
+    Ariadne::ValidatedKleenean determineTransitiveSafety( const NodeT& n ) const
+    {
+	if( possibly( !isSafe( n ) ) )
+	    return false;
+
+	bool reqIndet = false;
+	for( auto iout = outEdges( graph(), n ); iout.first != iout.second; ++iout.first )
+	{
+	    const NodeT& t = target( graph(), *iout.first );
+	    
+	    Ariadne::ValidatedKleenean ttSafe = isTransSafe( t );
+	    if( definitely( !ttSafe ) || possibly( !isSafe( t ) ) )
+		return false;
+	    if( possibly( !ttSafe ) ) //indeterminate
+		reqIndet = true;
+	}
+	return reqIndet ? Ariadne::ValidatedKleenean( Ariadne::indeterminate ) : Ariadne::ValidatedKleenean( true );
+    }
+    
+    /*
+      partitions reset nodes into those whose t-safety can be determined and those whose safety relies on indeterminate value
+      if first partition is empty, picks arbitrary node and sets it to true
+     */
+    template< typename IterT >
+    void fixResets( const IterT& resetBegin, const IterT& resetEnd )
+    {
+	auto iShiftBegin = resetBegin;
+	bool set = true;
+
+	while( iShiftBegin != resetEnd && set )
+	{
+	    set = false; // repeat while sth is set
+	    for( auto ifix = iShiftBegin; ifix != resetEnd; ++ifix )
+	    {
+		InsideGraphValue< E > * const fixInside = static_cast< InsideGraphValue< E > *>( graph::value( mMapping, *ifix ).get() );
+
+		Ariadne::ValidatedKleenean detTsafe = determineTransitiveSafety( *ifix );
+		if( definitely( detTsafe ) )
+		{
+		    fixInside->transSafe();
+		}
+		else if( definitely( !detTsafe ) )
+		{
+		    fixInside->transUnsafe();
+		}
+
+		if( definitely( detTsafe ) || definitely( !detTsafe ) )
+		{
+		    set = true;
+		    // move set elements away
+		    if( ifix != iShiftBegin ) // use std::swap here?
+		    {
+			NodeT tmp = *iShiftBegin;
+			*iShiftBegin = *ifix;
+			*ifix = tmp;
+		    }
+		    ++iShiftBegin;
+		}
+	    }
+	}
+
+	// if nothing maps to trans. unsafe, all indeterminates are trans. safe!
+	for( ; iShiftBegin != resetEnd && !set; ++iShiftBegin )
+	    static_cast< InsideGraphValue< E > * >( graph::value( mMapping, *iShiftBegin ).get() )->transSafe();
+    }
+
+    template< typename IterT >
+    void setTransitiveSafety( const IterT& iBegin, const IterT& iEnd )
+    {
+	Resetter resetter( *this );
+	
+	for( auto iset = iBegin; iset != iEnd; ++iset )
+	{
+	    std::shared_ptr< IGraphValue > nval = graph::value( mMapping, *iset );
+	    if( nval )
+	    {
+		InsideGraphValue< E > * const inval = static_cast< InsideGraphValue< E >* >( nval.get() );
+
+		if( !definitely( inval->isTransSafe() ) && ! definitely( !inval->isTransSafe() ) ) // indeterminate
+		{
+		    FindUnsafe isUnsafe;
+		    NodeEqual neq( *this );
+		    NodeHash nhash( *this );
+		    forwardDFT( graph(), *iset, isUnsafe, nhash, neq );
+
+		    if( isUnsafe )
+			inval->transUnsafe();
+		    else
+		    {
+			inval->transSafe();
+			backwardDFT( mMapping, *iset, resetter, nhash, neq );
+		    }
+		}
+	    }
+	}
+	// require positions in fix resets, think how to circumnavigate this next
+	fixResets( resetter.mReset.begin(), resetter.mReset.end() ); // fix all resets after having set all refined nodes
+    }
     
     Ariadne::BoundedConstraintSet mSafeSet;
     Ariadne::EffectiveVectorFunction mDynamics;
@@ -403,6 +582,45 @@ class RefinementTree
     MappingT mMapping;
     E mInitialEnclosure;
     NodeT mOutsideNode;
+};
+
+//! \todo is not default constructible
+template< typename E >
+class NodeEqual
+{
+  public:
+    NodeEqual( const RefinementTree< E >& rtree ) : mRtree( rtree ) {}
+
+    bool operator ()( const typename RefinementTree< E >::NodeT& n1, const typename RefinementTree< E >::NodeT& n2 ) const
+    {
+	auto nval1 = mRtree.nodeValue( n1 ), nval2 = mRtree.nodeValue( n2 );
+	if( !nval1 && !nval2 )
+	    return true;
+	else if( !nval1 || !nval2 )
+	    return false;
+	return nval1.value().get() == nval2.value().get();
+    }
+
+  private:
+    const RefinementTree< E >& mRtree;
+};
+
+//! \todo is not default constructible
+template< typename E >
+class NodeHash
+{
+  public:
+    NodeHash( const RefinementTree< E >& rtree ) : mRtree( rtree ) {}
+
+    size_t operator ()( const typename RefinementTree< E >::NodeT& n ) const
+    {
+	auto nval = mRtree.nodeValue( n );
+	if( !nval )
+	    return 0;
+	return nval.value().get().id();
+    }
+  private:
+    const RefinementTree< E >& mRtree;
 };
 
 #endif
