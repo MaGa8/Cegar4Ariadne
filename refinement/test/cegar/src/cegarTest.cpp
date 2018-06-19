@@ -4,7 +4,7 @@
 #include <limits>
 
 #ifndef DEBUG
-#define DEBUG true
+#define DEBUG false
 #endif
 
 std::default_random_engine CegarTest::mRandom = std::default_random_engine( std::random_device()() );
@@ -278,10 +278,10 @@ bool CegarTest::LoopTest::check() const
 	std::cout << "safe set " << mpRtree->constraints() << std::endl << std::endl;
 	std::cout << "graph " << std::endl;
 	std::function< Ariadne::ExactBoxType( const typename ExactRefinementTree::MappingT::ValueT& ) > printConv =
-	    std::bind( &CegarTest::extractEnclosure< Ariadne::ExactBoxType >, *mpRtree, std::placeholders::_1 );
+	    [this] (auto& val) { return extractEnclosure( *this->mpRtree, val ); };
 
 	graph::print( std::cout, mpRtree->graph(), printConv );
-
+	
 	for( auto vrange = graph::vertices( mpRtree->graph() ); vrange.first != vrange.second; ++vrange.first )
 	{
 	    auto nval = mpRtree->nodeValue( *vrange.first );
@@ -320,8 +320,8 @@ void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new InitialAbstraction( mTestSize, 0.1 * mRepetitions ), pStateless );
     addTest( new VerifySafety( mTestSize, 0.1 * mRepetitions ), pStateless );
     addTest( new VerifyCounterexamples( mTestSize, 0.05 * mRepetitions ), pStateless );

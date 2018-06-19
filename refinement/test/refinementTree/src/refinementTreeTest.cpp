@@ -1,5 +1,6 @@
 #include "refinementTreeTest.hpp"
 #include "testMacros.hpp"
+#include "graphValuePrinter.hpp"
 
 #include "geometry/interval.decl.hpp"
 #include "geometry/box.decl.hpp"
@@ -448,7 +449,7 @@ bool RefinementTreeTest::TransitiveSafetyTest::check() const
 	Ariadne::ValidatedKleenean tsafe = mpRtree->isTransSafe( *in.first );
 	if( !definitely( tsafe ) && !definitely( !tsafe ) )
 	{
-	    print( std::cout, mpRtree->graph(), GraphPrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
+	    print( std::cout, mpRtree->graph(), GraphValuePrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
 	    std::cout << mpRtree->nodeValue( *in.first ).value().get() << " is indeterminate " << std::endl;
 	    return false;
 	}
@@ -456,7 +457,7 @@ bool RefinementTreeTest::TransitiveSafetyTest::check() const
 	bool reachesUnsafe = reachUnsafe( *in.first, ns );
 	if( reachesUnsafe != definitely( !tsafe ) )
 	{
-	    print( std::cout, mpRtree->graph(), GraphPrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
+	    print( std::cout, mpRtree->graph(), GraphValuePrinter< Ariadne::ExactBoxType >::makeFun( true, false, true, true ) );
 	    
 	    std::cout << "ERROR at " << mpRtree->nodeValue( *in.first ).value().get() << std::endl;
 	    std::cout << "find reachable unsafe node " << reachesUnsafe << " but tsafety " << tsafe << std::endl;
@@ -474,12 +475,12 @@ void RefinementTreeTest::init()
     std::shared_ptr< ContinuousRandomRunner > pRcontinuous( new ContinuousRandomRunner() );
     std::shared_ptr< OnlyOnceRunner > pOnce( new OnlyOnceRunner() );
 
-    // addTest( new SizeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new IntersectionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    // addTest( new CSetIntersectionTest( 1*mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    // addTest( new RefinedNodesRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
-    // addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new AlwaysUnsafeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new SizeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new IntersectionTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new CSetIntersectionTest( 1*mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new RefinedNodesRemovalTest( 1 * mTestSize, 0.1 * mRepetitions ), pRcontinuous );
+    addTest( new PreimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new PostimageTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new AlwaysUnsafeTest( 1 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new TransitiveSafetyTest( 1*mTestSize, mRepetitions ), pRinterleave );
 }

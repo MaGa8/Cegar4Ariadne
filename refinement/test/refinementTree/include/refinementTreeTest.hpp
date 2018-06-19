@@ -210,60 +210,6 @@ struct RefinementTreeTest : public ITestGroup
 
     void init();
 };
-
-template< typename E >
-struct GraphPrinter
-{
-
-    static std::function< GraphPrinter< E >( const typename RefinementTree< E >::MappingT::ValueT& ) >
-    makeFun( bool printId, bool printEnc, bool printLoc, bool printTrans )
-    {
-	return [=] (const typename RefinementTree< E >::MappingT::ValueT& val ) {
-		   return GraphPrinter( *val, printId, printEnc, printLoc, printTrans ); };
-    }
-    
-    GraphPrinter( const IGraphValue& gval, bool printId, bool printEnc, bool printLoc, bool printTrans )
-	: mEnc( Ariadne::Vector< typename E::IntervalType >() )
-	, mPrintEnc( printEnc ), mPrintLoc( printLoc ), mPrintTrans( printTrans ), mPrintId( printId )
-    {
-	if( gval.isInside() )
-	{
-	    const InsideGraphValue< E >& pIn = static_cast< const InsideGraphValue< E > &>( gval );
-	    mEnc = pIn.getEnclosure();
-	    mLocSafety = pIn.isSafe();
-	    mTransSafety = pIn.isTransSafe();
-	    mId = pIn.id();
-	}
-	else
-	{
-	    mLocSafety = false;
-	    mTransSafety = false;
-	    mId = 0;
-	}
-    }
-	
-    E mEnc;
-    Ariadne::ValidatedKleenean mLocSafety, mTransSafety;
-    uint mId;
-    bool mPrintEnc, mPrintLoc, mPrintTrans, mPrintId;
-};
-
-
-
-template< typename E, typename CharT, typename TraitsT >
-std::basic_ostream< CharT, TraitsT >& operator <<( std::basic_ostream< CharT, TraitsT >& os, const GraphPrinter< E >& info )
-{
-    if( info.mPrintId )
-    	os << info.mId << ":  ";
-    if( info.mPrintEnc )
-    	os << info.mEnc << " ";
-    if( info.mPrintLoc )
-    	os << "(" << info.mLocSafety << ") ";
-    if( info.mPrintId )
-    	os << "(" << info.mTransSafety << ")";
-
-    return os;
-}
     
 
 
