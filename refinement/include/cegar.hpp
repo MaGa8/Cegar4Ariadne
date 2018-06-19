@@ -7,6 +7,7 @@
 #include "cegarObserver.hpp"
 #include "termination.hpp"
 #include "counterexampleStore.hpp"
+#include "graphValuePrinter.hpp"
 
 #include "geometry/geometry.hpp"
 #include "geometry/set.hpp"
@@ -15,16 +16,83 @@
 
 #include <stack>
 #include <map>
+#include <unordered_set>
+#include <list>
 #include <functional>
 
 template< typename E >
 using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 
 template< typename E >
-using NodeSet = std::set< typename RefinementTree< E >::NodeT, typename RefinementTree< E >::NodeComparator >;
+using NodeSet = std::unordered_set< typename RefinementTree< E >::NodeT, NodeHash< E >, NodeEqual< E > >;
 
 template< typename E >
 using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, typename RefinementTree< E >::NodeComparator >;
+
+
+/*!
+  runs BFS to find counterexample
+  any path terminates in
+  1) loop leading back to state along path
+  2) state with violated safety conditions
+  \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< E >::NodeT
+  \return vector of nodes terminated by a possibly unsafe node
+  \todo add parameter to control ordering of branches in dfs exploration 
+  \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
+*/
+template< typename E, typename IterT, typename SH, typename CH >
+void findCounterexampleBfs( const RefinementTree< E >& rtree
+			, const IterT& beginInitial, const IterT& endInitial
+			, CounterexampleStore< E, SH, CH >& cstore )
+{
+    std::list< CounterexampleT< E > > paths;
+    NodeSet< E > visited( beginInitial, endInitial, graph::size( rtree.graph() ), NodeHash( rtree ), NodeEqual( rtree ) );
+    std::transform( beginInitial, endInitial, std::back_inserter( paths )
+		    , [] (auto& n) { return CounterexampleT< E >( {n} ); } );
+
+    while( !paths.empty() )
+    {
+	for( auto ip = paths.begin(); ip != paths.end(); ++ip )
+	{
+	    auto& boundaryNode = ip->back();
+	    // visited.insert( boundaryNode );
+
+	    // std::cout << "exploreing counterexample of length " << ip->size() << std::endl;
+	    // std::cout << "boundary " << GraphValuePrinter< E >( *graph::value( rtree.graph(), boundaryNode ), false, true, true, true ) << std::endl;
+	    
+	    if( possibly( !rtree.isSafe( boundaryNode ) ) )
+	    {
+		cstore.found( rtree, ip->begin(), ip->end() );
+		ip = paths.erase( ip );
+		// std::cout << "found counterexample, remove path" << std::endl;
+	    }
+	    else if( definitely( rtree.isTransSafe( boundaryNode ) ) )
+	    {
+		ip = paths.erase( ip );
+		// std::cout << "trans safe path, give up" << std::endl;
+	    }
+	    else
+	    {
+		auto img = rtree.postimage( boundaryNode );
+		for( auto iImg = img.begin(); iImg != img.end(); ++iImg ) // try not to copy last path expanded
+		{
+		    if( visited.find( *iImg ) == visited.end() )
+		    {
+			CounterexampleT< E > copy( ip->begin(), ip->end() );
+			copy.push_back( *iImg );
+			paths.insert( ip, copy );
+			// std::cout << "expand path" << std::endl;
+		    }
+		    visited.insert( *iImg );
+		}
+		ip = paths.erase( ip );
+	    }
+	}
+    }
+
+    cstore.outOfCounterexamples();
+    // std::cout << "returning" << std::endl;
+}
 
 /*!
   runs DFS to find counterexample
@@ -40,20 +108,18 @@ template< typename E, typename NodeIterT, typename SH, typename CH >
 void findCounterexample( const RefinementTree< E >& rtree
 			 , NodeIterT iImgBegin, NodeIterT iImgEnd
 			 , CounterexampleStore< E, SH, CH >& counterStore
-			 , VisitMap< E >& visitMap
+			 , NodeSet< E >& visitSet
 			 , const std::vector< typename RefinementTree< E >::NodeT >& path = {}
 			 )
 {
     while( iImgBegin != iImgEnd && !counterStore.terminateSearch() )
     {
-	auto iVisited = visitMap.find( *iImgBegin );
+	auto iVisited = visitSet.find( *iImgBegin );
 	
-	if( iVisited == visitMap.end() || !iVisited->second )
+	if( iVisited == visitSet.end() && possibly( !rtree.isTransSafe( *iImgBegin ) ) ) // not visited and maybe not safe
 	{
-	    if( iVisited == visitMap.end() )
-		visitMap.emplace( *iImgBegin, true );
-	    else
-		iVisited->second = true;
+	    if( iVisited == visitSet.end() )
+		visitSet.emplace( *iImgBegin );
 
 	    CounterexampleT< E > copyPath( path.begin(), path.end() );
 	    copyPath.push_back( *iImgBegin );
@@ -63,7 +129,7 @@ void findCounterexample( const RefinementTree< E >& rtree
 	    else
 	    {
 		auto posts =  rtree.postimage( *iImgBegin );
-		findCounterexample( rtree, posts.begin(), posts.end(), counterStore, visitMap, copyPath );
+		findCounterexample( rtree, posts.begin(), posts.end(), counterStore, visitSet, copyPath );
 	    }
 	}
 	++iImgBegin;
@@ -77,9 +143,10 @@ void findCounterexample( RefinementTree< E >& rtree
 			 , CounterexampleStore< E, SH, CH >& counterStore
 			 )
 {
-    VisitMap< E > visitMap( {}, typename RefinementTree< E >::NodeComparator( rtree ) );
+    size_t nstates = graph::size( rtree.graph() );
+    NodeSet< E > visitSet( nstates, NodeHash( rtree ), NodeEqual( rtree ) );
     counterStore.startSearch();
-    findCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd, counterStore, visitMap );
+    findCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd, counterStore, visitSet );
 }
 
 /*! 
@@ -206,7 +273,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
     std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::BoundedConstraintSet& ) > interPred =
 	[effort] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( effort ) ); };
     
-    NodeSet< E > initialImage = NodeSet< E >( typename RefinementTree< E >::NodeComparator( rtree ) );
+    NodeSet< E > initialImage = NodeSet< E >( 0, NodeHash( rtree ), NodeEqual( rtree ) );
     {
 	auto img = rtree.intersection( initialSet, interPred );
 	initialImage.insert( img.begin(), img.end() );
@@ -222,8 +289,12 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
     {
 	(callStartIteration( observers, rtree ), ... );
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
-	
-	findCounterexample( rtree, initialImage.begin(), initialImage.end(), counters );
+
+	// dfs call
+	// findCounterexample( rtree, initialImage.begin(), initialImage.end(), counters );
+
+	// bfs call
+	findCounterexampleBfs( rtree, initialImage.begin(), initialImage.end(), counters );
 
 	(callSearchTerminated( observers, rtree ), ... );
 	
