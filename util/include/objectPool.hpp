@@ -2,15 +2,88 @@
 #define OBJECT_POOL_HPP
 
 #include <stack>
-#include <array>
+#include <vector>
 
-template< typename T > ObjectPool< T >;
+template< typename T > class ObjectPool;
+
+/*!
+  \class bulk allocates objects and hands out individual objects as shared pointers
+  \param T type of object to manage. Requires T to be default constructible
+ */
+template< typename T >
+class ObjectPoolRaw
+{
+  public:
+
+    //!\param chunkSize number of objects to allocate at once
+    ObjectPoolRaw( size_t chunkSize )
+	: mSize( chunkSize )
+	, mNewSize( chunkSize )
+	, mPosUnused( 0 )
+	, mChunks()
+	, mUsedObjects()
+    {
+	allocateNewChunk();
+    }
+
+    // \note pool requires have longer lifetime than pointers
+    ~ObjectPoolRaw()
+    {
+	while( !mUsedObjects.empty() )
+	    mUsedObjects.pop();
+	
+	while( !mChunks.empty() )
+	{
+	    delete [] mChunks.top();
+	    mChunks.pop();
+	}
+
+	// only deallocate unmanaged, new memory manually
+	// for( ; mPosUnused < mSize; ++mPosUnused )
+	    // delete (mNewObjects + mPosUnused);
+    }
+
+    //! \return pool pointer owning object of type T initialized to undef value
+    T* handOut()
+    {
+	if( mUsedObjects.empty() )
+	{
+	    if( mPosUnused >= mSize )
+		allocateNewChunk();
+
+	    ++mPosUnused;
+	    return (mChunks.top() + mPosUnused - 1 );
+	}
+	
+	T* ret = mUsedObjects.top();
+	mUsedObjects.pop();
+	return ret;
+    }
+
+    //! \brief hands pptr back to pool allowing it to be handed out again
+    template< typename TT >
+    void handBack( const TT* pptr )
+    {
+	mUsedObjects.push( static_cast< T* >( pptr ) );
+    }
+    
+  private:
+    void allocateNewChunk()
+    {
+	mChunks.push( new T[ mSize ]() );
+	mSize = mNewSize;
+	mPosUnused = 0;
+    }
+
+    uint mSize, mNewSize, mPosUnused;
+    std::stack< T* > mChunks, mUsedObjects;
+};
 
 /*!
   \brief smart pointer with shared semantics akin to std::shared_ptr< T >.  Instead of deallocating memory when the last reference goes out of scope, the memory is returned to the home pool.  The use count is continuously adapted on construction, copy construction, move construction, copy assignment, move assignment and deletion.
  */
 template< typename T >
-class PoolPoiner
+class PoolPointer
 {
   public:
     /*!
@@ -24,7 +97,7 @@ class PoolPoiner
 	, mHome( home )
     {}
 
-    PoolPointer( const PoolPointer& orig )
+    PoolPointer( const PoolPointer< T >& orig )
 	: mRes( orig.mRes )
 	, mUseCount( orig.mUseCount )
 	, mHome( orig.mHome )
@@ -32,7 +105,7 @@ class PoolPoiner
 	incrementCount();
     }
 
-    PoolPointer( const PoolPointer&& orig )
+    PoolPointer( const PoolPointer< T >&& orig )
 	: mRes( orig.mRes )
 	, mUseCount( orig.mUseCount )
 	, mHome( orig.mHome )
@@ -46,7 +119,7 @@ class PoolPoiner
 	decrementCount();
     }
 
-    PoolPointer& operator =( const PoolPointer& orig )
+    PoolPointer< T >& operator =( const PoolPointer< T >& orig )
     {
 	decrementCount();
 	
@@ -58,7 +131,7 @@ class PoolPoiner
 	return *this;
     }
 
-    PoolPointer& operator =( const PoolPointer&& orig )
+    PoolPointer< T >& operator =( const PoolPointer< T >&& orig )
     {
 	decrementCount();
 	
@@ -77,9 +150,9 @@ class PoolPoiner
 	return *mRes;
     }
 
-    T& operator ->() const
+    T* operator ->() const
     {
-	return *mRes;
+	return mRes;
     }
 
     //! \return pointer stored
@@ -88,7 +161,7 @@ class PoolPoiner
 	return mRes;
     }
 
-    void swap( PoolPoiner& other )
+    void swap( PoolPointer& other )
     {
 	if( this->mRes != other.mRes ) // otherwise: they're the same and swapping makes no difference
 	{
@@ -157,9 +230,9 @@ class ObjectPool
     ObjectPool( size_t chunkSize )
 	: mSize( chunkSize )
 	, mNewSize( chunkSize )
+	, mPosUnused( 0 )
 	, mNewObjects()
-	, miUnused()
-	, mUsedObjects( 0 )
+	, mUsedObjects()
     {
 	allocateNewChunk();
     }
@@ -178,8 +251,14 @@ class ObjectPool
 	for( ; mPosUnused < mSize; ++mPosUnused )
 	{
 	    delete (mNewObjects + mPosUnused);
-	    delete (mNewRefCount + mPosUnused);
+	    delete (mNewRefCounts + mPosUnused);
 	}
+    }
+
+    template< typename U >
+    ObjectPool& cast()
+    {
+	return *this;
     }
 
     //! \return pool pointer owning object of type T initialized to undef value
@@ -191,14 +270,11 @@ class ObjectPool
 		allocateNewChunk();
 
 	    ++mPosUnused;
-	    auto pp = PoolPointer( mNewObjects + mPosUnused - 1, mNewRefCounts + mPosUnused - 1, std::ref( *this ) );
-	    initCall( *pp, initArgs );
-	    return pp;
+	    return PoolPointer< T >( mNewObjects + mPosUnused - 1, mNewRefCounts + mPosUnused - 1, std::ref( *this ) );
 	}
 	
 	PoolPointer< T > ret = mUsedObjects.top();
 	mUsedObjects.pop();
-	initCall( *ret, initArgs );
 	return ret;
     }
 
@@ -211,8 +287,8 @@ class ObjectPool
   private:
     void allocateNewChunk()
     {
-	mNewObjects = new T[ mSize ];
-	mNewRefCounts = new uint[ mSize ];
+	mNewObjects = new T[ mSize ]();
+	mNewRefCounts = new uint[ mSize ]();
 	mSize = mNewSize;
 	mPosUnused = 0;
     }
@@ -221,7 +297,7 @@ class ObjectPool
     T* mNewObjects;
     uint* mNewRefCounts;
     std::stack< PoolPointer< T > > mUsedObjects;
-}
+};
 
 #endif
 
