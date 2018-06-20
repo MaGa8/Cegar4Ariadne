@@ -6,6 +6,7 @@
 #include "refinement.hpp"
 #include "treeValue.hpp"
 #include "graphValue.hpp"
+#include "objectPool.hpp"
 
 #include "geometry/box.hpp"
 #include "geometry/function_set.hpp"
@@ -35,7 +36,7 @@ class RefinementTree
     // refinement tree: stores pointers to values that vary depending on whether they are stored in leafs or interior nodes
 
     // mapping graph: stores pointers to values that are either an "always-unsafe-node" or regular node storing a tree node
-    typedef graph::AdjacencyDiGraph< std::shared_ptr< IGraphValue >, graph::VecMap, graph::InVec, graph::InVec > MappingT;
+    typedef graph::AdjacencyDiGraph< IGraphValue*, graph::VecMap, graph::InVec, graph::InVec > MappingT;
     typedef typename MappingT::VertexT NodeT;
 
     class NodeComparator
@@ -78,19 +79,21 @@ class RefinementTree
 	    ints[ i ] = Ariadne::ExactIntervalType( cast_exact( ub[ i ].lower() ), cast_exact( ub[ i ].upper() ) );
 	return Ariadne::ExactBoxType( ints );
     }
-    
+
     /*!
       \param initial abstraction using a single box
       \param constraints safety constraints to be satisfied
       \param dynamics function describing evolution of points
     */
     RefinementTree( const Ariadne::BoundedConstraintSet& safeSet
-		    , const Ariadne::EffectiveVectorFunction dynamics
+		    , const Ariadne::EffectiveVectorFunction& dynamics
 		    , const Ariadne::Effort effort
+		    , const uint poolChunkSize = 250
 		    )
 	: mSafeSet( safeSet )
 	, mDynamics( dynamics )
 	, mEffort( effort )
+	, mValuePool( poolChunkSize )
 	, mNodeIdCounter( 0 )
 	, mInitialEnclosure( upper2ExactBox( safeSet.bounding_box() ) )
     {
@@ -98,7 +101,7 @@ class RefinementTree
 	NodeT initialNode = addState( mInitialEnclosure );
 
 	// add outside node
-	auto iAddedOutside = graph::addVertex( mMapping, typename MappingT::ValueT( new OutsideGraphValue() ) );
+	auto iAddedOutside = graph::addVertex( mMapping, new OutsideGraphValue() );
 	if( iAddedOutside == graph::vertices( mMapping ).second )
 	    throw std::logic_error( "always unsafe node added but iterator to end returned" );
 	mOutsideNode = *iAddedOutside;
@@ -136,9 +139,9 @@ class RefinementTree
     //! \return tree value stored at node v, storing the box and safety
     std::optional< std::reference_wrapper< const InsideGraphValue< EnclosureT > > > nodeValue( const NodeT& v ) const
     {
-	const typename MappingT::ValueT& gval = graph::value( mMapping, v );
-	if( gval->isInside() )
-	    return std::make_optional( std::ref( static_cast< const InsideGraphValue< E >& >( *gval ) ) );
+	const IGraphValue* pval = graph::value( mMapping, v );
+	if( pval->isInside() )
+	    return std::make_optional( std::ref( static_cast< const InsideGraphValue< E >& >( *pval ) ) );
 	else
 	    return std::nullopt;
     }
@@ -373,8 +376,9 @@ class RefinementTree
 	    : (definitely( constraints().separated( enc ).check( mEffort ) )
 	       ? Ariadne::ValidatedKleenean( false )
 	       : Ariadne::indeterminate);
-	auto pvalue = std::shared_ptr< IGraphValue >( new InsideGraphValue< EnclosureT >( mNodeIdCounter++, enc, safety  ) );
-	auto iadded = graph::addVertex( mMapping, pvalue );
+	InsideGraphValue< E >* pvalue = mValuePool.handOut();
+	pvalue->init( mNodeIdCounter++, enc, safety );
+	auto iadded = graph::addVertex( mMapping, static_cast< IGraphValue* >( pvalue ) );
 	return *iadded;
     }
 
@@ -428,8 +432,8 @@ class RefinementTree
 	template< typename VisitSetT >
 	void visit( const MappingT& g, const NodeT& v, const VisitSetT& visited )
 	{
-	    const std::shared_ptr< IGraphValue >& pvval = graph::value( g, v );
-	    if( !pvval->isInside() || possibly( !static_cast< InsideGraphValue< E >* >( pvval.get() )->isSafe() ) )
+	    const IGraphValue* pvval = graph::value( g, v );
+	    if( !pvval->isInside() || possibly( !static_cast< const InsideGraphValue< E >* >( pvval )->isSafe() ) )
 		mFound = true;
 	}
 
@@ -467,7 +471,7 @@ class RefinementTree
 	{
 	    if( definitely( !mRtree.isTransSafe( v ) ) && definitely( mRtree.isSafe( v ) ) ) // trans unsafe and loc safe
 	    {
-		static_cast< InsideGraphValue< E > *>( graph::value( g, v ).get() )->resetTransSafe();
+		static_cast< InsideGraphValue< E > *>( graph::value( g, v ) )->resetTransSafe();
 		mReset.push_back( v );                    // does not re-insert nodes already reset
 	    }
 	}
@@ -510,7 +514,7 @@ class RefinementTree
 	    set = false; // repeat while sth is set
 	    for( auto ifix = iShiftBegin; ifix != resetEnd; ++ifix )
 	    {
-		InsideGraphValue< E > * const fixInside = static_cast< InsideGraphValue< E > *>( graph::value( mMapping, *ifix ).get() );
+		InsideGraphValue< E > * const fixInside = static_cast< InsideGraphValue< E > *>( graph::value( mMapping, *ifix ) );
 
 		Ariadne::ValidatedKleenean detTsafe = determineTransitiveSafety( *ifix );
 		if( definitely( detTsafe ) )
@@ -539,7 +543,7 @@ class RefinementTree
 
 	// if nothing maps to trans. unsafe, all indeterminates are trans. safe!
 	for( ; iShiftBegin != resetEnd && !set; ++iShiftBegin )
-	    static_cast< InsideGraphValue< E > * >( graph::value( mMapping, *iShiftBegin ).get() )->transSafe();
+	    static_cast< InsideGraphValue< E > * >( graph::value( mMapping, *iShiftBegin ) )->transSafe();
     }
 
     template< typename IterT >
@@ -549,10 +553,10 @@ class RefinementTree
 	
 	for( auto iset = iBegin; iset != iEnd; ++iset )
 	{
-	    std::shared_ptr< IGraphValue > nval = graph::value( mMapping, *iset );
-	    if( nval )
+	    IGraphValue* nval = graph::value( mMapping, *iset );
+	    if( nval->isInside() )
 	    {
-		InsideGraphValue< E > * const inval = static_cast< InsideGraphValue< E >* >( nval.get() );
+		InsideGraphValue< E > * const inval = static_cast< InsideGraphValue< E >* >( nval );
 
 		if( !definitely( inval->isTransSafe() ) && ! definitely( !inval->isTransSafe() ) ) // indeterminate
 		{
@@ -578,6 +582,7 @@ class RefinementTree
     Ariadne::BoundedConstraintSet mSafeSet;
     Ariadne::EffectiveVectorFunction mDynamics;
     Ariadne::Effort mEffort;
+    ObjectPoolRaw< InsideGraphValue< E > > mValuePool;
     unsigned long mNodeIdCounter;
     MappingT mMapping;
     E mInitialEnclosure;

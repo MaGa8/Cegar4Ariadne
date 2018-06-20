@@ -97,7 +97,7 @@ bool RefinementTreeTest::IntersectionTest::check() const
     {
 	// leaf should have value
 	auto iImg = std::find_if( imageSmallerBox.begin(), imageSmallerBox.end()
-				  , std::bind( &ExactRefinementTree::equal, *mpRtree, *vrange.first, std::placeholders::_1 ) );
+				  , [this, &vrange] (auto& n) {return mpRtree->equal( *vrange.first, n ); } );
 	auto nval = mpRtree->nodeValue( *vrange.first );
 
 	bool intersects = false;

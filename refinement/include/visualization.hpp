@@ -30,18 +30,18 @@ struct ZeroCex
 };
 
 template< typename Rtree, typename InisetT >
-Ariadne::Colour stateColor( const Rtree& rtree, const InisetT& initialSet, const AbstractInteriorTreeValue< typename Rtree::EnclosureT >& tv, bool reachable )
+Ariadne::Colour stateColor( const Rtree& rtree, const InisetT& initialSet, const InsideGraphValue< typename Rtree::EnclosureT >& gv, bool reachable )
 {
     if( reachable )
     {
-	if( definitely( tv.isSafe() ) )
+	if( definitely( gv.isSafe() ) )
 	{
-	    if( possibly( !initialSet.separated( tv.getEnclosure() ) ) )
+	    if( possibly( !initialSet.separated( gv.getEnclosure() ) ) )
 		return Ariadne::cyan;
 	    else
 		return Ariadne::green;
 	}
-	else if( definitely( !tv.isSafe() ) )
+	else if( definitely( !gv.isSafe() ) )
 	    return Ariadne::red;
 	else
 	    return Ariadne::Colour( 1, 0.7, 0 );
@@ -62,7 +62,7 @@ Ariadne::Figure visualize( const RefinementTree< E >& rtree, const InisetT& init
     findCounterexample( rtree, initialAbs.begin(), initialAbs.end(), cstore, reachMap );
 
     Ariadne::Figure fig( rtree.initialEnclosure(), Ariadne::PlanarProjectionMap( 2,0,1 ) );
-    for( auto vs = graph::vertices( rtree.leafMapping() ); vs.first != vs.second; ++vs.first )
+    for( auto vs = graph::vertices( rtree.graph() ); vs.first != vs.second; ++vs.first )
     {
 	auto vval = rtree.nodeValue( *vs.first );
 	if( vval )
