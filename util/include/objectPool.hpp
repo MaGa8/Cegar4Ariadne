@@ -62,7 +62,7 @@ class ObjectPoolRaw
 
     //! \brief hands pptr back to pool allowing it to be handed out again
     template< typename TT >
-    void handBack( const TT* pptr )
+    void handBack( TT* pptr )
     {
 	mUsedObjects.push( static_cast< T* >( pptr ) );
     }

@@ -353,7 +353,7 @@ class RefinementTree
 	refineEdges( v, refinedStates.begin(), refinedStates.end() );
     	
 	// unlink v from the graph after its connectivity is no longer needed
-	graph::removeVertex( mMapping, v );
+	removeNode( v );
 
 	// compute transitive safety AFTER unlinking parent node
 	setTransitiveSafety( refinedStates.begin(), refinedStates.end() );
@@ -577,6 +577,13 @@ class RefinementTree
 	}
 	// require positions in fix resets, think how to circumnavigate this next
 	fixResets( resetter.mReset.begin(), resetter.mReset.end() ); // fix all resets after having set all refined nodes
+    }
+
+    void removeNode( const NodeT& n)
+    {
+	IGraphValue* pval = graph::value( mMapping, n );
+	graph::removeVertex( mMapping, n );
+	mValuePool.handBack( static_cast< InsideGraphValue< E > * >( pval ) );
     }
     
     Ariadne::BoundedConstraintSet mSafeSet;
