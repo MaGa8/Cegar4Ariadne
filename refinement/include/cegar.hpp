@@ -20,6 +20,8 @@
 #include <list>
 #include <functional>
 
+#include <omp.h>
+
 template< typename E >
 using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 
@@ -41,112 +43,52 @@ using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, typename R
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
 template< typename E, typename IterT, typename SH, typename CH >
-void findCounterexampleBfs( const RefinementTree< E >& rtree
-			, const IterT& beginInitial, const IterT& endInitial
-			, CounterexampleStore< E, SH, CH >& cstore )
+void findCounterexample( const RefinementTree< E >& rtree
+			 , const IterT& beginInitial, const IterT& endInitial
+			 , CounterexampleStore< E, SH, CH >& cstore )
 {
-    std::list< CounterexampleT< E > > paths;
+    std::vector< CounterexampleT< E > > paths, newPaths;
     NodeSet< E > visited( beginInitial, endInitial, graph::size( rtree.graph() ), NodeHash( rtree ), NodeEqual( rtree ) );
     std::transform( beginInitial, endInitial, std::back_inserter( paths )
 		    , [] (auto& n) { return CounterexampleT< E >( {n} ); } );
 
-    while( !paths.empty() )
+    while( !paths.empty() && !cstore.terminateSearch() )
     {
-	for( auto ip = paths.begin(); ip != paths.end(); ++ip )
+#pragma omp parallel for
+	for( uint np = 0; np < paths.size(); ++np )
 	{
-	    auto& boundaryNode = ip->back();
-	    // visited.insert( boundaryNode );
+	    auto& boundaryNode = paths[ np ].back();
 
 	    // std::cout << "exploreing counterexample of length " << ip->size() << std::endl;
 	    // std::cout << "boundary " << GraphValuePrinter< E >( *graph::value( rtree.graph(), boundaryNode ), false, true, true, true ) << std::endl;
 	    
 	    if( possibly( !rtree.isSafe( boundaryNode ) ) )
 	    {
-		cstore.found( rtree, ip->begin(), ip->end() );
-		ip = paths.erase( ip );
-		// std::cout << "found counterexample, remove path" << std::endl;
+#pragma omp critical
+		cstore.found( rtree, paths[ np ].begin(), paths[ np ].end() );
 	    }
-	    else if( definitely( rtree.isTransSafe( boundaryNode ) ) )
-	    {
-		ip = paths.erase( ip );
-		// std::cout << "trans safe path, give up" << std::endl;
-	    }
-	    else
+	    else if( possibly( !rtree.isTransSafe( boundaryNode ) ) )
 	    {
 		auto img = rtree.postimage( boundaryNode );
 		for( auto iImg = img.begin(); iImg != img.end(); ++iImg ) // try not to copy last path expanded
 		{
 		    if( visited.find( *iImg ) == visited.end() )
 		    {
-			CounterexampleT< E > copy( ip->begin(), ip->end() );
+			CounterexampleT< E > copy( paths[ np ].begin(), paths[ np ].end() );
 			copy.push_back( *iImg );
-			paths.insert( ip, copy );
-			// std::cout << "expand path" << std::endl;
+#pragma omp critical
+			newPaths.push_back( copy );
 		    }
+#pragma omp critical		
 		    visited.insert( *iImg );
 		}
-		ip = paths.erase( ip );
 	    }
 	}
+	paths = std::move( newPaths );
+	newPaths.clear();
     }
-
     cstore.outOfCounterexamples();
     // std::cout << "returning" << std::endl;
-}
-
-/*!
-  runs DFS to find counterexample
-  any path terminates in
-  1) loop leading back to state along path
-  2) state with violated safety conditions
-  \param iImgBegin iterator to beginning of refinement tree nodes describing the image of the initial set, should dereference to RefinementTree< E >::NodeT
-  \return vector of nodes terminated by a possibly unsafe node
-  \todo add parameter to control ordering of branches in dfs exploration 
-  \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
-*/
-template< typename E, typename NodeIterT, typename SH, typename CH >
-void findCounterexample( const RefinementTree< E >& rtree
-			 , NodeIterT iImgBegin, NodeIterT iImgEnd
-			 , CounterexampleStore< E, SH, CH >& counterStore
-			 , NodeSet< E >& visitSet
-			 , const std::vector< typename RefinementTree< E >::NodeT >& path = {}
-			 )
-{
-    while( iImgBegin != iImgEnd && !counterStore.terminateSearch() )
-    {
-	auto iVisited = visitSet.find( *iImgBegin );
-	
-	if( iVisited == visitSet.end() && possibly( !rtree.isTransSafe( *iImgBegin ) ) ) // not visited and maybe not safe
-	{
-	    if( iVisited == visitSet.end() )
-		visitSet.emplace( *iImgBegin );
-
-	    CounterexampleT< E > copyPath( path.begin(), path.end() );
-	    copyPath.push_back( *iImgBegin );
-	    // counterexample found (could not happen if node was visited before)
-	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
-		counterStore.found( rtree, copyPath.begin(), copyPath.end() );
-	    else
-	    {
-		auto posts =  rtree.postimage( *iImgBegin );
-		findCounterexample( rtree, posts.begin(), posts.end(), counterStore, visitSet, copyPath );
-	    }
-	}
-	++iImgBegin;
-    }
-    counterStore.outOfCounterexamples();
-}
-
-template< typename E, typename NodeIterT, typename SH, typename CH >
-void findCounterexample( RefinementTree< E >& rtree
-			 , NodeIterT iAbstractionsBegin, NodeIterT iAbstractionsEnd
-			 , CounterexampleStore< E, SH, CH >& counterStore
-			 )
-{
-    size_t nstates = graph::size( rtree.graph() );
-    NodeSet< E > visitSet( nstates, NodeHash( rtree ), NodeEqual( rtree ) );
-    counterStore.startSearch();
-    findCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd, counterStore, visitSet );
 }
 
 /*! 
@@ -290,11 +232,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	(callStartIteration( observers, rtree ), ... );
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
 
-	// dfs call
-	// findCounterexample( rtree, initialImage.begin(), initialImage.end(), counters );
-
-	// bfs call
-	findCounterexampleBfs( rtree, initialImage.begin(), initialImage.end(), counters );
+	findCounterexample( rtree, initialImage.begin(), initialImage.end(), counters );
 
 	(callSearchTerminated( observers, rtree ), ... );
 	
