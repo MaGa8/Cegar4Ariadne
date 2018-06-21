@@ -581,9 +581,9 @@ class RefinementTree
 
     void removeNode( const NodeT& n)
     {
-	IGraphValue* pval = graph::value( mMapping, n );
+	// IGraphValue* pval = graph::value( mMapping, n );
 	graph::removeVertex( mMapping, n );
-	mValuePool.handBack( static_cast< InsideGraphValue< E > * >( pval ) );
+	// mValuePool.handBack( static_cast< InsideGraphValue< E > * >( pval ) );
     }
     
     Ariadne::BoundedConstraintSet mSafeSet;
