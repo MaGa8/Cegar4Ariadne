@@ -7,6 +7,7 @@
 #include "cegarObserver.hpp"
 #include "termination.hpp"
 #include "counterexampleStore.hpp"
+#include "graphValuePrinter.hpp"
 
 #include "geometry/geometry.hpp"
 #include "geometry/set.hpp"
@@ -15,19 +16,24 @@
 
 #include <stack>
 #include <map>
+#include <unordered_set>
+#include <list>
 #include <functional>
+
+#include <omp.h>
 
 template< typename E >
 using CounterexampleT = std::vector< typename RefinementTree< E >::NodeT >;
 
 template< typename E >
-using NodeSet = std::set< typename RefinementTree< E >::NodeT, typename RefinementTree< E >::NodeComparator >;
+using NodeSet = std::unordered_set< typename RefinementTree< E >::NodeT, NodeHash< E >, NodeEqual< E > >;
 
 template< typename E >
 using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, typename RefinementTree< E >::NodeComparator >;
 
+
 /*!
-  runs DFS to find counterexample
+  runs BFS to find counterexample
   any path terminates in
   1) loop leading back to state along path
   2) state with violated safety conditions
@@ -36,50 +42,53 @@ using VisitMap = std::map< typename RefinementTree< E >::NodeT, bool, typename R
   \todo add parameter to control ordering of branches in dfs exploration 
   \todo remember which nodes were already explored & safe: if encountered again, no need to check further as it leads to known result!
 */
-template< typename E, typename NodeIterT, typename SH, typename CH >
+template< typename E, typename IterT, typename SH, typename CH >
 void findCounterexample( const RefinementTree< E >& rtree
-			 , NodeIterT iImgBegin, NodeIterT iImgEnd
-			 , CounterexampleStore< E, SH, CH >& counterStore
-			 , VisitMap< E >& visitMap
-			 , const std::vector< typename RefinementTree< E >::NodeT >& path = {}
-			 )
+			 , const IterT& beginInitial, const IterT& endInitial
+			 , CounterexampleStore< E, SH, CH >& cstore )
 {
-    while( iImgBegin != iImgEnd && !counterStore.terminateSearch() )
-    {
-	auto iVisited = visitMap.find( *iImgBegin );
-	
-	if( iVisited == visitMap.end() || !iVisited->second )
-	{
-	    if( iVisited == visitMap.end() )
-		visitMap.emplace( *iImgBegin, true );
-	    else
-		iVisited->second = true;
+    std::vector< CounterexampleT< E > > paths, newPaths;
+    NodeSet< E > visited( beginInitial, endInitial, graph::size( rtree.graph() ), NodeHash( rtree ), NodeEqual( rtree ) );
+    std::transform( beginInitial, endInitial, std::back_inserter( paths )
+		    , [] (auto& n) { return CounterexampleT< E >( {n} ); } );
 
-	    CounterexampleT< E > copyPath( path.begin(), path.end() );
-	    copyPath.push_back( *iImgBegin );
-	    // counterexample found (could not happen if node was visited before)
-	    if( !definitely( rtree.isSafe( *iImgBegin ) ) )
-		counterStore.found( rtree, copyPath.begin(), copyPath.end() );
-	    else
+    while( !paths.empty() && !cstore.terminateSearch() )
+    {
+#pragma omp parallel for
+	for( uint np = 0; np < paths.size(); ++np )
+	{
+	    auto& boundaryNode = paths[ np ].back();
+
+	    // std::cout << "exploreing counterexample of length " << ip->size() << std::endl;
+	    // std::cout << "boundary " << GraphValuePrinter< E >( *graph::value( rtree.graph(), boundaryNode ), false, true, true, true ) << std::endl;
+	    
+	    if( possibly( !rtree.isSafe( boundaryNode ) ) )
 	    {
-		auto posts =  rtree.postimage( *iImgBegin );
-		findCounterexample( rtree, posts.begin(), posts.end(), counterStore, visitMap, copyPath );
+#pragma omp critical
+		cstore.found( rtree, paths[ np ].begin(), paths[ np ].end() );
+	    }
+	    else if( possibly( !rtree.isTransSafe( boundaryNode ) ) )
+	    {
+		auto img = rtree.postimage( boundaryNode );
+		for( auto iImg = img.begin(); iImg != img.end(); ++iImg ) // try not to copy last path expanded
+		{
+		    if( visited.find( *iImg ) == visited.end() )
+		    {
+			CounterexampleT< E > copy( paths[ np ].begin(), paths[ np ].end() );
+			copy.push_back( *iImg );
+#pragma omp critical
+			newPaths.push_back( copy );
+		    }
+#pragma omp critical		
+		    visited.insert( *iImg );
+		}
 	    }
 	}
-	++iImgBegin;
+	paths = std::move( newPaths );
+	newPaths.clear();
     }
-    counterStore.outOfCounterexamples();
-}
-
-template< typename E, typename NodeIterT, typename SH, typename CH >
-void findCounterexample( RefinementTree< E >& rtree
-			 , NodeIterT iAbstractionsBegin, NodeIterT iAbstractionsEnd
-			 , CounterexampleStore< E, SH, CH >& counterStore
-			 )
-{
-    VisitMap< E > visitMap( {}, typename RefinementTree< E >::NodeComparator( rtree ) );
-    counterStore.startSearch();
-    findCounterexample( rtree, iAbstractionsBegin, iAbstractionsEnd, counterStore, visitMap );
+    cstore.outOfCounterexamples();
+    // std::cout << "returning" << std::endl;
 }
 
 /*! 
@@ -140,7 +149,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
     typedef RefinementTree< E > Rtree;
     
     // determine: initial set and first state of counterexample intersect
-    std::optional< std::reference_wrapper< const InteriorTreeValue< typename Rtree::EnclosureT > > > oBeginCex = rtree.nodeValue( *beginCounter );
+    auto oBeginCex = rtree.nodeValue( *beginCounter );
 
     if( !oBeginCex )
     {
@@ -167,7 +176,7 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
 	return true;
     
     //map forward
-    const typename Rtree::EnclosureT& rtEnc = tree::value( rtree.tree(), tree::root( rtree.tree() ) )->getEnclosure();
+    const typename Rtree::EnclosureT& rtEnc = rtree.initialEnclosure();
     for( PathIterT nextCounter = beginCounter + 1; nextCounter != endCounter; beginCounter = nextCounter++ )
     {
 	auto oNext = rtree.nodeValue( *nextCounter );
@@ -261,7 +270,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
     std::function< Ariadne::ValidatedUpperKleenean( const typename Rtree::EnclosureT&, const Ariadne::BoundedConstraintSet& ) > interPred =
 	[effort] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( effort ) ); };
     
-    NodeSet< E > initialImage = NodeSet< E >( typename RefinementTree< E >::NodeComparator( rtree ) );
+    NodeSet< E > initialImage = NodeSet< E >( 0, NodeHash( rtree ), NodeEqual( rtree ) );
     {
 	auto img = rtree.intersection( initialSet, interPred );
 	initialImage.insert( img.begin(), img.end() );
@@ -277,7 +286,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
     {
 	(callStartIteration( observers, rtree ), ... );
 	(callSearchCounterexample(observers, rtree, initialImage.begin(), initialImage.end() ), ... );
-	
+
 	findCounterexample( rtree, initialImage.begin(), initialImage.end(), counters );
 
 	(callSearchTerminated( observers, rtree ), ... );
@@ -318,24 +327,23 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    {
 		if( rtree.nodeValue( refine ) && possibly( rtree.isSafe( refine ) ) )
 		{
-		    const typename Rtree::RefinementT::NodeT& treeNodeRef =
-			static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
 		    auto iRefined = initialImage.find( refine );
 
 		    (callStartRefinement( observers, rtree, refine ), ... );
 
 		    counters.invalidate( rtree, refine );
-		    rtree.refine( refine, refinement );
-
-		    // find a way to prevent this statement from executing if no observers are passed
-		    auto refinedNodes = rtree.leaves( treeNodeRef ); 
+		    auto refinedNodes = rtree.refine( refine, refinement );
+		    
 		    (callRefined( observers, rtree, refinedNodes.begin(), refinedNodes.end() ), ... );
 	 
 		    if( iRefined != initialImage.end() )
 		    {
 			initialImage.erase( iRefined );
-			auto refinedInitials = rtree.intersection( treeNodeRef, initialSet, interPred );
-			initialImage.insert( refinedInitials.begin(), refinedInitials.end() );
+			for( auto& nrefd : refinedNodes )
+			{
+			    if( possibly( rtree.overlapsConstraints( initialSet, nrefd ) ) )
+				initialImage.insert( nrefd );
+			}
 		    }
 		}
 	    }

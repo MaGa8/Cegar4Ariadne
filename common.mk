@@ -36,7 +36,7 @@ export OPTFLAGS = -std=c++17 -Wall
 RELFLAGS += -O
 DBGFLAGS += -g
 INCFLAGS += -I $(INCDIR)/ $(foreach mod,$(MODULES),-I $(mod)/$(INCDIR)/ )
-CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -g
+CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -g -fopenmp
 # libraries should be locally defined
 
 LOCAL_SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp) )
@@ -120,3 +120,10 @@ clean:
 	$(foreach mod,$(MODULES),echo $(PWD) && cd $(mod) && make clean && cd $(PWD) &&) echo "cleaned"
 
 -include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(LOCAL_SOURCES))))
+
+.PHONY: test
+test:
+	@echo "local sources " $(LOCAL_SOURCES)
+	@echo "global sources " $(GLOBAL_SOURCES)
+	@echo "cxx flags " $(CXXFLAGS)
+	@echo "lib flags " $(LDFLAGS) $(LDLIBS)

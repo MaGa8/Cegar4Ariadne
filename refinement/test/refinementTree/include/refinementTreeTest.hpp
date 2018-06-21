@@ -17,6 +17,8 @@ struct RefinementTreeTest : public ITestGroup
     // typedef RefinementTree< Ariadne::EffectiveIntervalType > EffectiveRefinementTree;
     typedef RefinementTree< Ariadne::Box< Ariadne::ExactIntervalType > > ExactRefinementTree;
 
+    typedef std::set< typename ExactRefinementTree::NodeT, typename ExactRefinementTree::NodeComparator > NodeSet;
+    
     // typedef RefinementTree< int > EffectiveRefinementTree;
     // typedef RefinementTree< int > ExactRefinementTree;
     
@@ -32,8 +34,8 @@ struct RefinementTreeTest : public ITestGroup
 	{
 	    if( val->isInside() )
 	    {
-		auto& inVal = static_cast< InsideGraphValue< typename RefinementTree< E >::RefinementT::NodeT >& >( *val );
-		return tree::value( mRtree.tree(), inVal.treeNode() )->getEnclosure();
+		auto& inVal = static_cast< InsideGraphValue< E >& >( *val );
+		return inVal.getEnclosure();
 	    }
 	    else
 		return E::zero( 2 ); // hard coded cause using 2d tests only
@@ -44,13 +46,20 @@ struct RefinementTreeTest : public ITestGroup
     };
 
     template< typename E, typename R >
-    static typename RefinementTree< E >::NodeT refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
+    static std::vector< typename RefinementTree< E >::NodeT > refineRandomLeaf( RefinementTree< E >& rt, const R& refiner )
     {
-	auto ls = rt.leaves();
+	auto vrange = graph::vertices( rt.graph() );
 	// need to store n otherwise graph part will be removed from memory (will be removed from graph)
-	typename RefinementTree< E >::NodeT n = *(ls.begin() + (std::uniform_int_distribution<>( 0, ls.size() - 1 )( mRandom ) ) );
-	rt.refine( n, refiner );
-	return n;
+	typename RefinementTree< E >::NodeT n;
+	do
+	{
+	    uint jump = std::uniform_int_distribution<>( 0, std::distance( vrange.first, vrange.second ) - 1 )( mRandom );
+	    auto irefine = vrange.first;
+	    std::advance( irefine, jump );
+	    n = *irefine;
+	} while( rt.equal( rt.outside(), n ) );
+							
+	return rt.refine( n, refiner );
     }
 
     template< typename E >
@@ -59,34 +68,56 @@ struct RefinementTreeTest : public ITestGroup
 	LargestSideRefiner refiner;
 	for( uint i = 0; i < depth; ++i )
 	{
-	    auto lvs = rt.leaves();
-	    for( typename RefinementTree< E >::NodeT& lf : lvs )
-		rt.refine( lf, refiner );
+	    auto vrange = graph::vertices( rt.graph() );
+	    for( auto inode = vrange.first; inode != vrange.second; ++inode )
+		rt.refine( *inode, refiner );
 	}
     }
 
-    template< typename E >
-    static bool nodeEquals( const RefinementTree< E >& rt, const typename RefinementTree< E >::NodeT& n1, const typename RefinementTree< E >::NodeT& n2 )
-    {
-	return rt.nodeValue( n1 ) == rt.nodeValue( n2 );
-    }
-
-    template< typename IntervalT >
-    static RefinementTree< Ariadne::Box< IntervalT > > getDefaultTree( const Ariadne::Box< IntervalT > rootBox, uint cap )
+    template< typename BoxT >
+    static RefinementTree< BoxT >* staticMap( const BoxT safeBox, const Ariadne::Effort& e )
     {
 	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
 	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
-	Ariadne::EffectiveScalarFunction constraintExpression = (a + b);
 	// static dynamics
 	Ariadne::RealVariable x( "x" ), y( "y" );
 	Ariadne::Space< Ariadne::Real > vspace = {x, y};
 	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x, y} );
-	return RefinementTree< Ariadne::Box< IntervalT > >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( rootBox ) )
-							    , f, Ariadne::Effort( 5 ) );
+	return new RefinementTree< BoxT >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( safeBox ) ), f, e );
     }
 
-    template< typename RefTree >
-    static void printNodeValue( const std::optional< std::reference_wrapper< const InteriorTreeValue< typename RefTree::EnclosureT > > > otn )
+    template< typename BoxT >
+    static RefinementTree< BoxT >* squareMap( const BoxT safeBox, const Ariadne::Effort& e )
+    {
+	Ariadne::EffectiveScalarFunction a = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	, b = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+	// static dynamics
+	Ariadne::RealVariable x( "x" ), y( "y" );
+	Ariadne::Space< Ariadne::Real > vspace = {x, y};
+	Ariadne::EffectiveVectorFunction f = Ariadne::make_function( vspace, {x*x, y*y} );
+	return new RefinementTree< BoxT >( Ariadne::BoundedConstraintSet( Ariadne::RealBox( safeBox ) ), f, e );
+    }
+
+    //! \return refinement tree for henon map with strictly positive initial and safe sets (i.e. left hand bottom corner is origin
+    template< typename BoxType >
+    static RefinementTree< BoxType >* henonMap( const BoxType& safeBox
+						, double a, double b, const Ariadne::Effort& e )
+    {
+	Ariadne::EffectiveScalarFunction cx = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 0 )
+	    , cy = Ariadne::EffectiveScalarFunction::coordinate( Ariadne::EuclideanDomain( 2 ), 1 );
+
+	Ariadne::RealBox realSafeBox( safeBox );
+	Ariadne::BoundedConstraintSet safeSet( realSafeBox );
+	
+	Ariadne::RealVariable x( "x" ), y( "y" );
+	Ariadne::RealConstant fa( "a", Ariadne::Real( a ) ), fb( "b", Ariadne::Real( b ) );
+	Ariadne::EffectiveVectorFunction henon = Ariadne::make_function( {x, y}, {1 - fa*x*x + y, fb*x} );
+
+	return new RefinementTree< BoxType >( safeSet, henon, e );
+    }
+
+    template< typename E >
+    static void printNodeValue( const std::optional< std::reference_wrapper< const InsideGraphValue< E > > >& otn )
     {
 	if( otn )
 	    std::cout << otn.value().get().getEnclosure() << " ";
@@ -94,25 +125,14 @@ struct RefinementTreeTest : public ITestGroup
 	    std::cout << "[unsafe] ";
     }
     
-    // test expansion:
-    // proper number of nodes in graph: number of refinements - 1
-    // proper depth: increasing if refining deepest level node otherwise stagnant
-    class ExpansionTest : public ITest
-    {
-	std::unique_ptr< ExactRefinementTree > mpRtree;
-	LargestSideRefiner mRefiner;
-	const uint EXPANSION_SIZE;
-	uint mPreviousNoNodes, mPreviousHeight, mExpandNodeDepth;
-	STATEFUL_TEST( ExpansionTest );
-    };
-    
     // test leaves after couple of expansions
-    class LeavesTest : public ITest
+    class SizeTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	const uint EXPANSION_SIZE = 2;
+	LargestSideRefiner mRefiner;
 	uint mExpansionCounter;
-	STATEFUL_TEST( LeavesTest );
+	STATEFUL_TEST( SizeTest );
     };
 
     // test intersection: brute force all leaves and test for intersection
@@ -126,17 +146,17 @@ struct RefinementTreeTest : public ITestGroup
     // test intersection with random circular constraint set
     class CSetIntersectionTest : public ITest
     {
-	std::unique_ptr< ExactRefinementTree > mpRtree;
-	LargestSideRefiner mRefiner;
-	STATEFUL_TEST( CSetIntersectionTest );
+    	std::unique_ptr< ExactRefinementTree > mpRtree;
+    	LargestSideRefiner mRefiner;
+    	STATEFUL_TEST( CSetIntersectionTest );
     };
     
     // test whether non-leafs are absent from graph
-    class NonLeafRemovalTest : public ITest
+    class RefinedNodesRemovalTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
 	LargestSideRefiner mRefiner;
-	STATEFUL_TEST( NonLeafRemovalTest );
+	STATEFUL_TEST( RefinedNodesRemovalTest );
 	
     };
 
@@ -144,7 +164,6 @@ struct RefinementTreeTest : public ITestGroup
     class PreimageTest : public ITest
     {
 	std::unique_ptr< ExactRefinementTree > mpRtree;
-	typename ExactRefinementTree::NodeT mRefined;
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( PreimageTest );
     };
@@ -153,7 +172,6 @@ struct RefinementTreeTest : public ITestGroup
     class PostimageTest : public ITest
     {
     	std::unique_ptr< ExactRefinementTree > mpRtree;
-    	typename ExactRefinementTree::NodeT mRefined;
     	LargestSideRefiner mRefiner;
     	STATEFUL_TEST( PostimageTest );
     };
@@ -165,6 +183,19 @@ struct RefinementTreeTest : public ITestGroup
 	LargestSideRefiner mRefiner;
 	STATEFUL_TEST( AlwaysUnsafeTest );
     };
+
+    // test that transitive safety is set correctly: true if no unsafe node can be reached, false otherwise
+    class TransitiveSafetyTest : public ITest
+    {
+	std::unique_ptr< ExactRefinementTree > mpRtree;
+	std::vector< typename ExactRefinementTree::NodeT > mRefined;
+	LargestSideRefiner mRefiner;
+	
+	bool reachUnsafe( const typename ExactRefinementTree::NodeT& n, NodeSet& visited ) const;
+	
+	STATEFUL_TEST( TransitiveSafetyTest );
+    };
+    
 
     // move away to cegar test
     // //positve test for finding counterexamples
@@ -179,6 +210,8 @@ struct RefinementTreeTest : public ITestGroup
 
     void init();
 };
+    
+
 
 #endif
 
