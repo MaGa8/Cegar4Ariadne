@@ -14,6 +14,7 @@ TEST_RUNNER_DIR = $(ROOTDIR)/testRunner
 TREE_DIR = $(ROOTDIR)/bintree
 GRAPH_DIR = $(ROOTDIR)/digraph
 REFINEMENT_DIR = $(ROOTDIR)/refinement
+UTIL_DIR = $(ROOTDIR)/util
 ARIADNE_DIR = $(ROOTDIR)/../ariadne
 
 SRCDIR = src

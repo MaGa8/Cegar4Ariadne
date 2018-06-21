@@ -279,7 +279,7 @@ struct DebugOutput : public CegarObserver
     template< typename Rtree >
     void startIteration( const Rtree& rtree )
     {
-	std::cout << "start iteration: tree of size " << rtree.graph().size() << std::endl;
+	std::cout << "start iteration: size " << graph::size( rtree.graph() ) << std::endl;
     }
 
     //! \brief immediatly called before the refinement tree is searched for counterexamples

@@ -320,8 +320,8 @@ void CegarTest::init()
 {
     std::shared_ptr< ITestRunner > pRinterleave( new InterleaveRandomRunner() )
 	, pStateless( new StatelessRunner() );
-    // addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
-    // addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new FindCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
+    addTest( new FindNoCounterexampleTest( 0.5 * mTestSize, 0.1 * mRepetitions ), pRinterleave );
     addTest( new InitialAbstraction( mTestSize, 0.1 * mRepetitions ), pStateless );
     // addTest( new VerifySafety( mTestSize, 0.1 * mRepetitions ), pStateless );
     addTest( new VerifyCounterexamples( mTestSize, 0.05 * mRepetitions ), pStateless );

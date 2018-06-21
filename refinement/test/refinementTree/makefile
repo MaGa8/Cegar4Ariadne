@@ -1,6 +1,6 @@
 ROOTDIR = ../../..
 TARGET = runRefinementTreeTest
-MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR)
+MODULES = $(REFINEMENT_DIR) $(TEST_RUNNER_DIR) $(TREE_DIR) $(GRAPH_DIR) $(UTIL_DIR)
 
 # only set this variables if not in recursion (-> duplication)
 INCFLAGS ?= -isystem $(ARIADNE_DIR)/ -isystem $(ARIADNE_DIR)/source/
