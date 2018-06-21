@@ -112,6 +112,15 @@ Ariadne::ExactBoxType boundsPoint2Box( const Ariadne::Point< Ariadne::Bounds< F 
     return Ariadne::Box( Ariadne::Vector( intervals ) );
 }
 
+template< typename F >
+Ariadne::ExactBoxType exactPoint2Box( const Ariadne::ExactPoint& pt )
+{
+    Ariadne::Array< Ariadne::ExactIntervalType > intervals( pt.dimension() );
+    std::transform( pt.array().begin(), pt.array().end(), intervals.begin()
+		    , [] (const F& x) {return Ariadne::ExactIntervalType( cast_exact( x ), cast_exact( x ) );} );
+    return Ariadne::Box( Ariadne::Vector( intervals ) );
+}
+
 // implement this using lower kleenean?
 /*! 
   \param beginCounter and endCounter iterators to beginning and end of counterexample trajectory, should dereference to typename RefinementTree< E >::NodeT
@@ -175,6 +184,52 @@ Ariadne::ValidatedUpperKleenean isSpurious( const RefinementTree< E >& rtree
     }
     return false;
 }
+
+/*!
+  \brief test whether pt begins a trajectory inside sn that begins within the initial set and eventually leafes the safe set.
+  \return true if pt certainly maps to unsafe state. false if abstract path corresponding to the trajectory of pt contains a loop before reaching an unsafe state
+*/
+template< typename E >
+Ariadne::ValidatedUpperKleenean safeTrajectory( const RefinementTree< E >& rtree
+						, const typename RefinementTree< E >::NodeT& sn
+						, const Ariadne::ValidatedPoint& pt
+						, const Ariadne::BoundedConstraintSet& initialSet
+						, const Ariadne::Effort& effort )
+{
+    typedef RefinementTree< E > R;
+
+    if( definitely( initialSet.separated( boundsPoint2Box( pt ) ) ) )
+	return true;
+
+    // return validated kleenean whether pt is in n
+    auto ptInNode = [&rtree] (const Ariadne::ValidatedPoint& pt, const typename R::NodeT& n ) {
+			auto nval = rtree.nodeValue( n );
+			if( nval )
+			    return nval.value().get().getEnclosure().contains( pt );
+			return !rtree.initialEnclosure().contains( pt );
+		    };
+    
+    typename R::NodeComparator ncomp( rtree );
+    std::set< typename R::NodeT, typename R::NodeComparator > visited( ncomp );
+    auto cs = sn;
+    Ariadne::ValidatedPoint ptm = pt;
+    while( visited.find( cs ) == visited.end() &&
+    	   possibly( rtree.isSafe( cs ) ) &&
+    	   possibly( ptInNode( ptm, cs ) ) ) // last clause: catch pt not in sn
+    {
+    	visited.insert( cs );
+    	ptm = rtree.dynamics().evaluate( ptm );
+    	auto img = rtree.postimage( cs ); 
+    	auto iIn = std::find_if( img.begin(), img.end(), [&ptInNode, &ptm] (auto& n) { return possibly( ptInNode( ptm, n ) ); } );
+
+    	if( iIn == img.end() )
+    	    throw std::logic_error( "mapped point needs to map to one abstract state in abstract image" );
+    	cs = *iIn;
+    }
+
+    return possibly( rtree.isSafe( cs ) );
+}
+
 
 // can only prove that there exists a true counterexample -> system is unsafe
 /*
@@ -240,12 +295,17 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 	    
 	    (callCheckSpurious( observers, rtree, counterexample.first.begin(), counterexample.first.end() ), ... );
 	
-	    Ariadne::ValidatedUpperKleenean spurious = isSpurious( rtree, counterexample.first.begin(), counterexample.first.end(), initialSet, effort );
+	    auto cexBeginVal = rtree.nodeValue( counterexample.first.front() );
+	    Ariadne::ValidatedUpperKleenean safe = false;
+	    if( cexBeginVal )
+	    {
+		Ariadne::Point< Ariadne::ValidatedNumericType > cen = cexBeginVal.value().get().getEnclosure().centre();
+		safe = safeTrajectory( rtree, counterexample.first.front()
+					 , cexBeginVal.value().get().getEnclosure().centre()
+					 , initialSet, effort );
+	    }
 
-	    (callSpurious( observers, rtree, counterexample.first.begin(), counterexample.first.end(), spurious ), ... );
-	
-	    if( definitely( !spurious ) &&
-		definitely( !rtree.isSafe( counterexample.first.back() ) ) )
+	    if( definitely( !safe ) )
 	    {
 		(callFinished( observers, rtree, Ariadne::ValidatedKleenean( false ) ), ... );
 		return std::make_pair( Ariadne::ValidatedKleenean( false ), counterexample.first );
@@ -256,7 +316,7 @@ std::pair< Ariadne::ValidatedKleenean, CounterexampleT< E > > cegar( RefinementT
 
 	    for( const typename Rtree::NodeT& refine : nodesToRefine )
 	    {
-		if( rtree.nodeValue( refine ) )
+		if( rtree.nodeValue( refine ) && possibly( rtree.isSafe( refine ) ) )
 		{
 		    const typename Rtree::RefinementT::NodeT& treeNodeRef =
 			static_cast< const InsideGraphValue< typename Rtree::RefinementT::NodeT >& >( *graph::value( rtree.leafMapping(), refine ) ).treeNode();
