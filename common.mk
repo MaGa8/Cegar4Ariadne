@@ -37,7 +37,7 @@ export OPTFLAGS = -std=c++17 -Wall
 RELFLAGS += -O
 DBGFLAGS += -g
 INCFLAGS += -I $(INCDIR)/ $(foreach mod,$(MODULES),-I $(mod)/$(INCDIR)/ )
-CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -g -fopenmp
+CXXFLAGS += $(INCFLAGS) $(OPTFLAGS) -O2 -fopenmp
 # libraries should be locally defined
 
 LOCAL_SOURCES = $(notdir $(wildcard $(SRCDIR)/*.cpp) )
@@ -110,13 +110,17 @@ endif
 
 .PHONY: setup
 setup: check
-	if [ ! -d $(BUILDDIR) ]; then mkdir $(BUILDDIR); fi
-	if [ ! -d $(BUILDDIR)/$(OBJDIR) ]; then mkdir $(BUILDDIR)/$(OBJDIR); fi
+	if [ ! -d $(DBGDIR) ]; then mkdir $(DBGDIR); fi
+	if [ ! -d $(DBGDIR)/$(OBJDIR) ]; then mkdir $(DBGDIR)/$(OBJDIR); fi
 	if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
-	if [ ! -d $(BUILDDIR)/$(BINDIR) ]; then mkdir $(BUILDDIR)/$(BINDIR); fi
+	if [ ! -d $(DBGDIR)/$(BINDIR) ]; then mkdir $(DBGDIR)/$(BINDIR); fi
+	if [ ! -d $(RELDIR) ]; then mkdir $(RELDIR); fi	
+	if [ ! -d $(RELDIR)/$(OBJDIR) ]; then mkdir $(RELDIR)/$(OBJDIR); fi
+	if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
+	if [ ! -d $(RELDIR)/$(BINDIR) ]; then mkdir $(RELDIR)/$(BINDIR); fi
 
 .PHONY: clean
-clean:
+clean:  setup
 	find $(addprefix $(DBGDIR)/,$(OBJDIR) $(BINDIR)) $(addprefix $(RELDIR)/,$(OBJDIR) $(BINDIR)) $(DEPDIR) -mindepth 1 -exec rm \{\} \;
 	$(foreach mod,$(MODULES),echo $(PWD) && cd $(mod) && make clean && cd $(PWD) &&) echo "cleaned"
 

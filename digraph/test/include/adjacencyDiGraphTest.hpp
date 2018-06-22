@@ -22,25 +22,27 @@ struct AdjacencyDiGraphTest : public ITestGroup
 
     // helpers
     template< typename T
-	      , template< typename K, typename V > typename VCT
+	      , template< typename K, typename V, typename CompT > typename VCT
 	      , template< typename S > typename IECT
 	      , template< typename S > typename OECT
-	      , template< typename S > typename ValDistT >
-    static AdjacencyDiGraph< T, VCT, IECT, OECT > randomVertices( size_t number, ValDistT< T >& vdist )
+	      , template< typename S > typename ValDistT
+	      , typename ComparatorT = std::equal_to< T > >
+    static AdjacencyDiGraph< T, VCT, IECT, OECT, ComparatorT > randomVertices( size_t number, ValDistT< T >& vdist )
     {
-	AdjacencyDiGraph< T, VCT, IECT, OECT > ag;
+	AdjacencyDiGraph< T, VCT, IECT, OECT, ComparatorT > ag;
 	for( uint i = 0; i < number; ++i )
 	    addVertex( ag, vdist( mRandom ) );
 	return ag;
     }
 
     template< typename T
-	      , template< typename K, typename V > typename VCT
+	      , template< typename K, typename V, typename CompT > typename VCT
 	      , template< typename S > typename IECT
-	      , template< typename S > typename OECT >
-    static AdjacencyDiGraph< T, VCT, IECT, OECT > randomEdges( AdjacencyDiGraph< T, VCT, IECT, OECT >& ag, size_t number )
+	      , template< typename S > typename OECT
+	      , typename ComparatorT = std::equal_to< T > >
+    static AdjacencyDiGraph< T, VCT, IECT, OECT, ComparatorT > randomEdges( AdjacencyDiGraph< T, VCT, IECT, OECT, ComparatorT >& ag, size_t number )
     {
-	typedef AdjacencyDiGraph< T, VCT, IECT, OECT > G;
+	typedef AdjacencyDiGraph< T, VCT, IECT, OECT, ComparatorT > G;
 	typename DiGraphTraits< G >::VRangeT vs = vertices( ag );
 	std::uniform_int_distribution<> jumpDist( 0, std::distance( vs.first, vs.second ) - 1 );
 	for( uint i = 0; i < number; ++i )
