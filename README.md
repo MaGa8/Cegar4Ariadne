@@ -3,4 +3,6 @@ Implementation of continous state space CEGAR for hybrid model checking library 
 
 Requires Ariadne core library installed, please refer to the website of the [Ariadne project](http://ariadne-cps.org/).
 
-Building and usage instructions are soon to follow...
+Experiments can be found in experiments/ and built inside the respective directories with `make release` or `make debug`.
+
+
