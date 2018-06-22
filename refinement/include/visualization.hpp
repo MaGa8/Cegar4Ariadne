@@ -59,7 +59,7 @@ Ariadne::Figure visualize( const RefinementTree< E >& rtree, const InisetT& init
     std::function< Ariadne::ValidatedUpperKleenean( const typename RefinementTree< E >::EnclosureT&, const Ariadne::BoundedConstraintSet& ) > interPred =
 	[&effort] (auto& enc, auto& cset) {return !(cset.separated( enc ).check( effort ) ); };
     auto initialAbs = rtree.intersection( initialSet, interPred );
-    findCounterexample( rtree, initialAbs.begin(), initialAbs.end(), cstore, reachMap );
+    findCounterexample( rtree, initialAbs.begin(), initialAbs.end(), cstore );
 
     Ariadne::Figure fig( rtree.initialEnclosure(), Ariadne::PlanarProjectionMap( 2,0,1 ) );
     for( auto vs = graph::vertices( rtree.graph() ); vs.first != vs.second; ++vs.first )
@@ -68,8 +68,8 @@ Ariadne::Figure visualize( const RefinementTree< E >& rtree, const InisetT& init
 	if( vval )
 	{
 	    auto tv = vval.value().get();
-	    auto imapEntry = reachMap.find( *vs.first );
-	    fig.set_fill_colour( stateColor( rtree, initialSet, tv, imapEntry != reachMap.end() && imapEntry->second ) );
+	    // auto imapEntry = reachMap.find( *vs.first );
+	    // fig.set_fill_colour( stateColor( rtree, initialSet, tv, imapEntry != reachMap.end() && imapEntry->second ) );
 	    fig.draw( tv.getEnclosure() );
 	}
     }
